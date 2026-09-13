@@ -82,3 +82,4 @@ lib/supabase/
 middleware.ts             ochrana stránok + obnova session
 supabase-policies.sql     RLS policies na spustenie v Supabase SQL Editore
 ```
+
