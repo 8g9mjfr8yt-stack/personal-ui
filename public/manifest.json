@@ -1,0 +1,22 @@
+{
+  "name": "Denný agent",
+  "short_name": "Denný agent",
+  "description": "Osobný AI agent na organizáciu dní a práce",
+  "start_url": "/today",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#171717",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "name": "Pripomienky úloh",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "*/5 * * * *" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "id": "a1e2b3c4-d5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "tasks",
+        "filterType": "none"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [224, 0],
+      "id": "b2f3c4d5-e6a7-4b8c-9d0e-1f2a3b4c5d6e",
+      "name": "Get many rows",
+      "credentials": {
+        "supabaseApi": { "id": "ftZ1ISLQcYUx6gHP", "name": "Supabase account" }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst tasks = items.map(i => i.json);\nconst now = new Date();\nconst LEAD_MINUTES = 15; // ako dlho vopred pripomenúť\nconst windowEnd = new Date(now.getTime() + LEAD_MINUTES * 60000);\n\nconst due = tasks.filter(t => {\n  if (!t.scheduled_time) return false;\n  if (t.completed_at) return false;\n  if (t.reminder_sent_at) return false;\n  const st = new Date(t.scheduled_time);\n  return st >= now && st <= windowEnd;\n});\n\nreturn due.map(t => {\n  const st = new Date(t.scheduled_time);\n  const time = st.toLocaleTimeString('sk-SK', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Bratislava' });\n  const minsLeft = Math.max(0, Math.round((st - now) / 60000));\n  const message = 'O ' + minsLeft + ' min (' + time + '): ' + t.title + (t.priority ? ' (' + t.priority + ')' : '');\n  return { json: { id: t.id, title: t.title, message } };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 0],
+      "id": "c3a4b5c6-f7a8-4c9d-0e1f-2a3b4c5d6e7f",
+      "name": "Find due reminders"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://ntfy.sh/denny-agent-4085389eb4f3",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Title", "value": "Pripomienka úlohy" },
+            { "name": "Click", "value": "https://personal-ui-gilt.vercel.app/today" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "text/plain",
+        "body": "={{ $json.message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [672, 0],
+      "id": "d4b5c6d7-a8b9-4d0e-1f2a-3b4c5d6e7f8a",
+      "name": "Send push"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n.totojemoja.site/webhook/tasks-update",
+        "sendHeaders": true,
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"id\": $json.id, \"reminder_sent_at\": $now.toISO() } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [896, 0],
+      "id": "e5c6d7e8-b9c0-4e1f-2a3b-4c5d6e7f8a9b",
+      "name": "Mark reminded"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": { "main": [[{ "node": "Get many rows", "type": "main", "index": 0 }]] },
+    "Get many rows": { "main": [[{ "node": "Find due reminders", "type": "main", "index": 0 }]] },
+    "Find due reminders": { "main": [[{ "node": "Send push", "type": "main", "index": 0 }]] },
+    "Send push": { "main": [[{ "node": "Mark reminded", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Bratislava"
+  }
+}
