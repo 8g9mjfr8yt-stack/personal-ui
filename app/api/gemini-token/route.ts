@@ -23,6 +23,10 @@ import {
   DAILY_LOG_TOOLS,
   DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
 } from "@/lib/gemini/dailyLogTools";
+import {
+  CALENDAR_TOOLS,
+  CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
+} from "@/lib/gemini/calendarTools";
 
 // Musí byť presne rovnaký model ako v app/(app)/voice/page.tsx.
 // Zoznam Live modelov: https://ai.google.dev/gemini-api/docs/models
@@ -78,6 +82,7 @@ export async function POST() {
               ...INSPIRATION_TOOLS,
               ...INBOX_TOOLS,
               ...DAILY_LOG_TOOLS,
+              ...CALENDAR_TOOLS,
             ],
             systemInstruction: {
               parts: [
@@ -91,6 +96,7 @@ export async function POST() {
                     INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
                     INBOX_TOOLS_SYSTEM_INSTRUCTION,
                     DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
+                    CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
                   ].join("\n\n"),
                 },
               ],

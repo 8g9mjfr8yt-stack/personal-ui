@@ -51,6 +51,12 @@ import {
   DAILY_LOG_TOOL_NAMES,
   runDailyLogTool,
 } from "@/lib/gemini/dailyLogTools";
+import {
+  CALENDAR_TOOLS,
+  CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
+  CALENDAR_TOOL_NAMES,
+  runCalendarTool,
+} from "@/lib/gemini/calendarTools";
 
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
@@ -75,6 +81,7 @@ const TOOL_RUNNERS: Array<{
   { names: INSPIRATION_TOOL_NAMES, run: runInspirationTool },
   { names: INBOX_TOOL_NAMES, run: runInboxTool },
   { names: DAILY_LOG_TOOL_NAMES, run: runDailyLogTool },
+  { names: CALENDAR_TOOL_NAMES, run: runCalendarTool },
 ];
 
 function findToolRunner(name: string) {
