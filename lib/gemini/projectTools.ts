@@ -4,6 +4,7 @@ import {
   getProjects,
   createProject,
   updateProject,
+  deleteProject,
 } from "@/lib/supabase/projects";
 
 export const PROJECT_TOOLS: Tool[] = [
@@ -49,6 +50,21 @@ export const PROJECT_TOOLS: Tool[] = [
           required: ["id"],
         },
       },
+      {
+        name: "delete_project",
+        description:
+          "Natrvalo zmaže projekt (samotné úlohy/poznámky/inšpirácia priradené k projektu ostanú, len sa im zruší priradenie). VŽDY si najprv nahlas over s používateľom, že to naozaj chce, a túto funkciu zavolaj až po jeho jasnom súhlase.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            id: {
+              type: Type.STRING,
+              description: "ID projektu (zisti cez get_projects).",
+            },
+          },
+          required: ["id"],
+        },
+      },
     ],
   },
 ];
@@ -57,6 +73,7 @@ export const PROJECT_TOOL_NAMES = [
   "get_projects",
   "create_project",
   "update_project",
+  "delete_project",
 ];
 
 export const PROJECT_TOOLS_SYSTEM_INSTRUCTION = `
@@ -67,6 +84,10 @@ zavolaj get_projects.
 DÔLEŽITÉ: keď používateľ jasne povie "projekt" (napr. "ulož mi to ako
 projekt", "toto je nový projekt"), zavolaj create_project — NIKDY nie
 create_task, aj keby to znelo ako jedna konkrétna vec.
+delete_project je nevratné — pred jeho zavolaním sa VŽDY najprv nahlas
+spýtaj na potvrdenie ("Naozaj mám zmazať projekt ...?") a zavolaj ho až po
+jasnom súhlase. Zmazanie projektu nezmaže úlohy/poznámky/inšpiráciu, ktoré
+k nemu patrili — tým sa len zruší priradenie (project_id).
 `.trim();
 
 export async function runProjectTool(
@@ -84,6 +105,9 @@ export async function runProjectTool(
       case "update_project":
         if (!args.id) return { error: "Chýba povinné pole 'id'." };
         return { result: await updateProject(supabase, args as any) };
+      case "delete_project":
+        if (!args.id) return { error: "Chýba povinné pole 'id'." };
+        return { result: await deleteProject(supabase, args.id) };
       default:
         return { error: `Neznámy nástroj: ${name}` };
     }

@@ -58,3 +58,15 @@ export async function updateProject(
   if (error) throw error;
   return data;
 }
+
+export async function deleteProject(supabase: SupabaseClient, id: string) {
+  if (!id) throw new Error("delete_project: chýba 'id'.");
+  const { data, error } = await supabase
+    .from("projects")
+    .delete()
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}

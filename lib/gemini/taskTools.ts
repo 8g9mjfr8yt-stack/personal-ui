@@ -54,6 +54,11 @@ export const TASK_TOOLS: Tool[] = [
               description:
                 "Voliteľné ID inej úlohy, ktorá musí byť hotová skôr, než táto dáva zmysel (zisti cez get_tasks). Použi pri následnosti typu 'toto spravím až po tom, čo dokončím X'.",
             },
+            project_id: {
+              type: Type.STRING,
+              description:
+                "Voliteľné ID projektu, ku ktorému táto úloha patrí (zisti cez get_projects podľa názvu, ktorý používateľ spomenul). Použi, keď používateľ povie, že úloha patrí k nejakému projektu.",
+            },
             context: {
               type: Type.STRING,
               description:
@@ -84,6 +89,11 @@ export const TASK_TOOLS: Tool[] = [
             depends_on_task_id: {
               type: Type.STRING,
               description: "ID úlohy, ktorá musí byť hotová skôr (zisti cez get_tasks).",
+            },
+            project_id: {
+              type: Type.STRING,
+              description:
+                "ID projektu, ku ktorému táto úloha patrí (zisti cez get_projects). Pošli prázdny reťazec na odstránenie priradenia k projektu.",
             },
             context: {
               type: Type.STRING,
@@ -165,6 +175,11 @@ Pravidlá:
   Toto pole sa NESLEDUJE automaticky na pozadí — keď sa používateľ neskôr
   spýta "čo môžem teraz urobiť" a spomenie podobnú podmienku, prejdi
   zoznam z get_tasks a nájdi úlohy, ktorých context sedí.
+- Priradenie k projektu: ak používateľ spomenie, že úloha patrí k
+  nejakému projektu (napr. "toto je súčasť projektu X", "priraď to k
+  projektu X"), zavolaj get_projects, nájdi správny projekt podľa názvu a
+  ulož jeho ID do project_id (pri create_task alebo update_task). Ak si
+  nie si istý, ktorý projekt myslí, spýtaj sa.
 - DÔLEŽITÉ rozlíšenie Task vs. Project: create_task je iba pre konkrétnu,
   malú akciu (zavolať klientovi, poslať CV, pripraviť ponuku). Ak
   používateľ použije slovo "projekt" (napr. "ulož mi to ako projekt",

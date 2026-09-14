@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getProjects, createProject } from "@/lib/supabase/projects";
+import { getProjects, createProject, deleteProject } from "@/lib/supabase/projects";
 
 type Project = {
   id: string;
@@ -22,6 +22,7 @@ export default function ProjectsPage() {
   const [priority, setPriority] = useState("");
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   async function load() {
     const supabase = createClient();
@@ -61,6 +62,31 @@ export default function ProjectsPage() {
       setError(e2?.message || "Nepodarilo sa uložiť projekt.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Zmazanie projektu — pridané po živom teste 2026-09-14 (predtým sa
+  // testovacie/zbytočné projekty nemali ako odstrániť ani z UI, ani hlasom).
+  // Neruší úlohy/poznámky/inšpiráciu priradené k projektu, len im zruší
+  // project_id (on delete set null v schema.sql).
+  async function handleDelete(id: string, projectName: string) {
+    if (
+      !confirm(
+        `Naozaj natrvalo zmazať projekt "${projectName}"? Úlohy/poznámky priradené k nemu ostanú, len sa im zruší priradenie.`
+      )
+    )
+      return;
+    setBusyId(id);
+    setError(null);
+    try {
+      const supabase = createClient();
+      await deleteProject(supabase, id);
+      await load();
+    } catch (err) {
+      const e = err as Error;
+      setError(e?.message || "Nepodarilo sa zmazať projekt.");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -125,7 +151,16 @@ export default function ProjectsPage() {
         <ul className="space-y-2">
           {projects.map((p) => (
             <li key={p.id} className="rounded-lg border border-neutral-200 p-3">
-              <div className="font-medium">{p.name}</div>
+              <div className="flex items-start justify-between gap-2">
+                <div className="font-medium">{p.name}</div>
+                <button
+                  onClick={() => handleDelete(p.id, p.name)}
+                  disabled={busyId === p.id}
+                  className="shrink-0 rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 disabled:opacity-50"
+                >
+                  Zmazať
+                </button>
+              </div>
               <div className="text-sm text-neutral-500">
                 stav: {p.status}
                 {p.priority ? ` · priorita: ${p.priority}` : ""}
