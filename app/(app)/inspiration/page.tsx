@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getInspiration, createInspiration } from "@/lib/supabase/inspiration";
+import {
+  getInspiration,
+  createInspiration,
+  uploadInspirationFile,
+  getInspirationFileUrl,
+} from "@/lib/supabase/inspiration";
 
 type Inspiration = {
   id: string;
   title: string | null;
   source_type: string | null;
   source_url: string | null;
+  storage_url: string | null;
   why_saved: string | null;
   tags: string[] | null;
   created_at: string;
@@ -16,18 +22,37 @@ type Inspiration = {
 
 export default function InspirationPage() {
   const [items, setItems] = useState<Inspiration[] | null>(null);
+  const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
   const [whySaved, setWhySaved] = useState("");
   const [tags, setTags] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function load() {
     const supabase = createClient();
     try {
-      const data = await getInspiration(supabase);
-      setItems(data as Inspiration[]);
+      const data = (await getInspiration(supabase)) as Inspiration[];
+      setItems(data);
+
+      // Bucket `inspiration` je private — na zobrazenie treba dočasnú
+      // podpísanú URL pre každý riadok, ktorý má nahraný súbor.
+      const withStorage = data.filter((i) => i.storage_url);
+      if (withStorage.length > 0) {
+        const urls = await Promise.all(
+          withStorage.map(async (i) => {
+            try {
+              const url = await getInspirationFileUrl(supabase, i.storage_url!);
+              return [i.id, url] as const;
+            } catch {
+              return [i.id, ""] as const;
+            }
+          })
+        );
+        setImageUrls(Object.fromEntries(urls));
+      }
     } catch (err) {
       const e = err as Error;
       setError(e?.message || "Nepodarilo sa načítať inšpiráciu.");
@@ -40,7 +65,7 @@ export default function InspirationPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!title.trim() && !sourceUrl.trim()) return;
+    if (!title.trim() && !sourceUrl.trim() && !file) return;
     setSaving(true);
     setError(null);
     const supabase = createClient();
@@ -49,9 +74,16 @@ export default function InspirationPage() {
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
+
+      let storagePath: string | null = null;
+      if (file) {
+        storagePath = await uploadInspirationFile(supabase, file);
+      }
+
       await createInspiration(supabase, {
         title: title.trim() || null,
         source_url: sourceUrl.trim() || null,
+        storage_url: storagePath,
         why_saved: whySaved.trim() || null,
         tags: parsedTags,
       });
@@ -59,6 +91,7 @@ export default function InspirationPage() {
       setSourceUrl("");
       setWhySaved("");
       setTags("");
+      setFile(null);
       await load();
     } catch (err) {
       const e2 = err as Error;
@@ -104,9 +137,15 @@ export default function InspirationPage() {
           onChange={(e) => setTags(e.target.value)}
           className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
         />
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          className="w-full text-sm"
+        />
         <button
           type="submit"
-          disabled={saving || (!title.trim() && !sourceUrl.trim())}
+          disabled={saving || (!title.trim() && !sourceUrl.trim() && !file)}
           className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-50"
         >
           {saving ? "Ukladám…" : "Uložiť inšpiráciu"}
@@ -128,6 +167,14 @@ export default function InspirationPage() {
           {items.map((i) => (
             <li key={i.id} className="rounded-lg border border-neutral-200 p-3">
               <div className="font-medium">{i.title || i.source_url || "(bez názvu)"}</div>
+              {i.storage_url && imageUrls[i.id] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrls[i.id]}
+                  alt={i.title || "inšpirácia"}
+                  className="mt-2 max-h-48 rounded-md object-contain"
+                />
+              )}
               {i.source_url && (
                 <a
                   href={i.source_url}

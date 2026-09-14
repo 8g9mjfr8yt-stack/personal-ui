@@ -34,3 +34,27 @@ export async function createProject(
   if (error) throw error;
   return data;
 }
+
+export async function updateProject(
+  supabase: SupabaseClient,
+  input: { id: string } & Partial<{
+    name: string;
+    description: string | null;
+    status: string;
+    priority: string | null;
+    deadline: string | null;
+  }>
+) {
+  const { id, ...fields } = input;
+  if (!id) throw new Error("update_project: chýba 'id'.");
+  // Zámerne bez fallbackov — čiastočná aktualizácia, rovnaký vzor ako
+  // update_task v lib/supabase/tasks.ts. `updated_at` nastaví DB trigger.
+  const { data, error } = await supabase
+    .from("projects")
+    .update(fields)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}

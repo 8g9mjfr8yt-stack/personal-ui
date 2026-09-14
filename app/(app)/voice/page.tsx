@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   TASK_TOOLS,
   TASK_TOOLS_SYSTEM_INSTRUCTION,
+  TASK_TOOL_NAMES,
   runTaskTool,
 } from "@/lib/gemini/taskTools";
 import {
@@ -14,9 +15,71 @@ import {
   MEMORY_TOOL_NAMES,
   runMemoryTool,
 } from "@/lib/gemini/memoryTools";
+import {
+  NOTE_TOOLS,
+  NOTE_TOOLS_SYSTEM_INSTRUCTION,
+  NOTE_TOOL_NAMES,
+  runNoteTool,
+} from "@/lib/gemini/noteTools";
+import {
+  PROJECT_TOOLS,
+  PROJECT_TOOLS_SYSTEM_INSTRUCTION,
+  PROJECT_TOOL_NAMES,
+  runProjectTool,
+} from "@/lib/gemini/projectTools";
+import {
+  GOAL_TOOLS,
+  GOAL_TOOLS_SYSTEM_INSTRUCTION,
+  GOAL_TOOL_NAMES,
+  runGoalTool,
+} from "@/lib/gemini/goalTools";
+import {
+  INSPIRATION_TOOLS,
+  INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
+  INSPIRATION_TOOL_NAMES,
+  runInspirationTool,
+} from "@/lib/gemini/inspirationTools";
+import {
+  INBOX_TOOLS,
+  INBOX_TOOLS_SYSTEM_INSTRUCTION,
+  INBOX_TOOL_NAMES,
+  runInboxTool,
+} from "@/lib/gemini/inboxTools";
+import {
+  DAILY_LOG_TOOLS,
+  DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
+  DAILY_LOG_TOOL_NAMES,
+  runDailyLogTool,
+} from "@/lib/gemini/dailyLogTools";
 
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
+
+// Dispatch tabuľka: mená nástrojov → funkcia, ktorá ich vykoná. Pridanie
+// ďalšej skupiny nástrojov (nová entita) znamená pridať jeden riadok sem,
+// namiesto rastúceho reťazca if/else podľa jednotlivých mien (pôvodný vzor
+// z Fázy 4.5, keď existovali iba Tasks a Memory).
+const TOOL_RUNNERS: Array<{
+  names: string[];
+  run: (
+    supabase: any,
+    name: string,
+    args: Record<string, any>
+  ) => Promise<{ result?: unknown; error?: string }>;
+}> = [
+  { names: TASK_TOOL_NAMES, run: runTaskTool },
+  { names: MEMORY_TOOL_NAMES, run: runMemoryTool },
+  { names: NOTE_TOOL_NAMES, run: runNoteTool },
+  { names: PROJECT_TOOL_NAMES, run: runProjectTool },
+  { names: GOAL_TOOL_NAMES, run: runGoalTool },
+  { names: INSPIRATION_TOOL_NAMES, run: runInspirationTool },
+  { names: INBOX_TOOL_NAMES, run: runInboxTool },
+  { names: DAILY_LOG_TOOL_NAMES, run: runDailyLogTool },
+];
+
+function findToolRunner(name: string) {
+  return TOOL_RUNNERS.find((r) => r.names.includes(name))?.run;
+}
 
 type Status = "idle" | "connecting" | "live" | "reconnecting" | "error";
 
@@ -133,10 +196,10 @@ export default function VoicePage() {
 
     const responses = await Promise.all(
       functionCalls.map(async (fc: any) => {
-        const isMemoryTool = MEMORY_TOOL_NAMES.includes(fc.name);
-        const { result, error } = isMemoryTool
-          ? await runMemoryTool(supabase, fc.name, fc.args || {})
-          : await runTaskTool(supabase, fc.name, fc.args || {});
+        const runner = findToolRunner(fc.name);
+        const { result, error } = runner
+          ? await runner(supabase, fc.name, fc.args || {})
+          : { error: `Neznámy nástroj: ${fc.name}` };
         console.log(`[voice] výsledok ${fc.name}:`, error ? { error } : { result });
         return {
           id: fc.id,

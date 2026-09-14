@@ -50,3 +50,15 @@ create policy "authenticated full access" on agent_memory
   for all to authenticated using (true) with check (true);
 
 grant select, insert, update, delete on agent_memory to authenticated;
+
+-- Fáza 3 leftovers (2026-09-14) — upload fotiek/súborov do Inbox a
+-- Inspiration cez Storage bucket `inspiration` (private). Bucket dosiaľ
+-- nemal žiadnu storage.objects policy, takže authenticated rola nemala
+-- žiadny prístup (rovnaký druh chyby ako "permission denied for table"
+-- pri bežných tabuľkách v Fáze 2 — RLS na storage.objects je nezávislá
+-- vrstva od "bucket je private/public").
+create policy "authenticated full access to inspiration bucket"
+on storage.objects for all
+to authenticated
+using (bucket_id = 'inspiration')
+with check (bucket_id = 'inspiration');

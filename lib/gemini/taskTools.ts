@@ -18,7 +18,7 @@ export const TASK_TOOLS: Tool[] = [
       {
         name: "get_tasks",
         description:
-          "Vráti zoznam VŠETKÝCH nedokončených úloh používateľa (vrátane ich termínov due_date), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie alebo zmazanie.",
+          "Vráti zoznam VŠETKÝCH nedokončených úloh používateľa (vrátane due_date/start_date, depends_on_task_id a context), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", alebo \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id inej úlohy.",
         parameters: { type: Type.OBJECT, properties: {} },
       },
       {
@@ -44,6 +44,21 @@ export const TASK_TOOLS: Tool[] = [
               type: Type.STRING,
               description: "Voliteľný presný naplánovaný čas v ISO 8601 formáte.",
             },
+            start_date: {
+              type: Type.STRING,
+              description:
+                "Voliteľný najskorší deň (YYYY-MM-DD), kedy sa má úloha robiť. Spolu s due_date vytvorí časové okno, napr. 'niekedy od utorka do piatka' → start_date=utorok, due_date=piatok.",
+            },
+            depends_on_task_id: {
+              type: Type.STRING,
+              description:
+                "Voliteľné ID inej úlohy, ktorá musí byť hotová skôr, než táto dáva zmysel (zisti cez get_tasks). Použi pri následnosti typu 'toto spravím až po tom, čo dokončím X'.",
+            },
+            context: {
+              type: Type.STRING,
+              description:
+                "Voliteľná voľná podmienka/spúšťač, ktorý nie je dátum (napr. 'keď si požičiam vŕtačku', 'keď bude pekný víkend'). Iba sa zapíše — automaticky sa nesleduje.",
+            },
           },
           required: ["title"],
         },
@@ -62,6 +77,18 @@ export const TASK_TOOLS: Tool[] = [
             priority: { type: Type.STRING },
             due_date: { type: Type.STRING, description: "YYYY-MM-DD" },
             scheduled_time: { type: Type.STRING, description: "ISO 8601" },
+            start_date: {
+              type: Type.STRING,
+              description: "YYYY-MM-DD — najskorší deň, kedy sa má úloha robiť.",
+            },
+            depends_on_task_id: {
+              type: Type.STRING,
+              description: "ID úlohy, ktorá musí byť hotová skôr (zisti cez get_tasks).",
+            },
+            context: {
+              type: Type.STRING,
+              description: "Voľná podmienka/spúšťač, ktorý nie je dátum.",
+            },
           },
           required: ["id"],
         },
@@ -93,6 +120,14 @@ export const TASK_TOOLS: Tool[] = [
   },
 ];
 
+export const TASK_TOOL_NAMES = [
+  "get_tasks",
+  "create_task",
+  "update_task",
+  "complete_task",
+  "delete_task",
+];
+
 export const TASK_TOOLS_SYSTEM_INSTRUCTION = `
 Si Michalov osobný hlasový asistent (Denný agent), hovoríš po slovensky.
 Máš nástroje na prácu s jeho úlohami (get_tasks, create_task, update_task,
@@ -115,6 +150,27 @@ Pravidlá:
   urobil).
 - Ak nie je jasné, či používateľ vydáva príkaz alebo len rozmýšľa nahlas,
   radšej sa krátko spýtaj, než aby si niečo vykonal omylom.
+- Časové okno: ak používateľ povie rozsah ("niekedy od utorka do piatka",
+  "tento týždeň"), použi start_date (najskôr) aj due_date (najneskôr)
+  namiesto toho, aby si si vybral jeden náhodný deň. Ak povie iba jeden
+  konkrétny deň/čas, stačí due_date (prípadne scheduled_time pre presný
+  čas) — start_date nechaj prázdne.
+- Následnosť: ak úloha dáva zmysel až po inej úlohe ("toto spravím až po
+  tom, čo dokončím X"), zavolaj get_tasks, nájdi ID úlohy X a ulož ho ako
+  depends_on_task_id. Takúto úlohu neponúkaj ako "na urobenie teraz", kým
+  úloha, na ktorej závisí, ešte nie je hotová (t.j. stále sa objavuje v
+  get_tasks).
+- Fuzzy podmienky (nie dátum): ak používateľ opíše podmienku typu "keď si
+  požičiam vŕtačku" alebo "keď bude pekný víkend", ulož ju do poľa context.
+  Toto pole sa NESLEDUJE automaticky na pozadí — keď sa používateľ neskôr
+  spýta "čo môžem teraz urobiť" a spomenie podobnú podmienku, prejdi
+  zoznam z get_tasks a nájdi úlohy, ktorých context sedí.
+- DÔLEŽITÉ rozlíšenie Task vs. Project: create_task je iba pre konkrétnu,
+  malú akciu (zavolať klientovi, poslať CV, pripraviť ponuku). Ak
+  používateľ použije slovo "projekt" (napr. "ulož mi to ako projekt",
+  "toto je nový projekt X"), alebo očividne opisuje väčšiu oblasť práce,
+  ku ktorej môžu časom patriť viaceré úlohy, NIKDY to neukladaj cez
+  create_task — zavolaj namiesto toho create_project.
 - Buď prirodzený, neformálny, stručný, občas vtipný. Nemoralizuj. Keď
   používateľ povie "nie", rešpektuj to a okamžite prestaň.
 `.trim();

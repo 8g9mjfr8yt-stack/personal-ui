@@ -8,6 +8,21 @@ import {
   MEMORY_TOOLS,
   MEMORY_SYSTEM_INSTRUCTION,
 } from "@/lib/gemini/memoryTools";
+import { NOTE_TOOLS, NOTE_TOOLS_SYSTEM_INSTRUCTION } from "@/lib/gemini/noteTools";
+import {
+  PROJECT_TOOLS,
+  PROJECT_TOOLS_SYSTEM_INSTRUCTION,
+} from "@/lib/gemini/projectTools";
+import { GOAL_TOOLS, GOAL_TOOLS_SYSTEM_INSTRUCTION } from "@/lib/gemini/goalTools";
+import {
+  INSPIRATION_TOOLS,
+  INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
+} from "@/lib/gemini/inspirationTools";
+import { INBOX_TOOLS, INBOX_TOOLS_SYSTEM_INSTRUCTION } from "@/lib/gemini/inboxTools";
+import {
+  DAILY_LOG_TOOLS,
+  DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
+} from "@/lib/gemini/dailyLogTools";
 
 // Musí byť presne rovnaký model ako v app/(app)/voice/page.tsx.
 // Zoznam Live modelov: https://ai.google.dev/gemini-api/docs/models
@@ -51,14 +66,32 @@ export async function POST() {
             // Fáza 4.5 — nástroje na úlohy aj na trvalú pamäť sa spájajú do
             // jedného zoznamu/inštrukcie (Gemini Live berie jeden config
             // na session).
-            tools: [...TASK_TOOLS, ...MEMORY_TOOLS],
+            // Fáza 3 leftovers (2026-09-14) — zvyšné entity (Notes, Inbox,
+            // Projects, Goals, Inspiration, Daily Log) pridané ako fast-path
+            // Supabase nástroje rovnakým vzorom ako Tasks/Memory vyššie.
+            tools: [
+              ...TASK_TOOLS,
+              ...MEMORY_TOOLS,
+              ...NOTE_TOOLS,
+              ...PROJECT_TOOLS,
+              ...GOAL_TOOLS,
+              ...INSPIRATION_TOOLS,
+              ...INBOX_TOOLS,
+              ...DAILY_LOG_TOOLS,
+            ],
             systemInstruction: {
               parts: [
                 {
-                  text:
-                    TASK_TOOLS_SYSTEM_INSTRUCTION +
-                    "\n\n" +
+                  text: [
+                    TASK_TOOLS_SYSTEM_INSTRUCTION,
                     MEMORY_SYSTEM_INSTRUCTION,
+                    NOTE_TOOLS_SYSTEM_INSTRUCTION,
+                    PROJECT_TOOLS_SYSTEM_INSTRUCTION,
+                    GOAL_TOOLS_SYSTEM_INSTRUCTION,
+                    INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
+                    INBOX_TOOLS_SYSTEM_INSTRUCTION,
+                    DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
+                  ].join("\n\n"),
                 },
               ],
             },
