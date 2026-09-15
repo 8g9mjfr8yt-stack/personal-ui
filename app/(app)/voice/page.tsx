@@ -239,14 +239,36 @@ export default function VoicePage() {
       model: MODEL,
       config: {
         responseModalities: [Modality.AUDIO],
-        // Fáza 4.5 — spojené nástroje na úlohy aj na trvalú pamäť; musí byť
-        // identické s tým, čo je zamknuté v /api/gemini-token route.ts.
-        tools: [...TASK_TOOLS, ...MEMORY_TOOLS],
+        // Musí byť identické so zoznamom zamknutým v /api/gemini-token
+        // route.ts (server-side liveConnectConstraints.config) — pri
+        // ephemeral tokene je server-side konfigurácia tá, ktorá reálne
+        // platí, ale držíme klienta v súlade, aby nezavádzal pri čítaní kódu
+        // ani keby sa správanie API niekedy zmenilo.
+        tools: [
+          ...TASK_TOOLS,
+          ...MEMORY_TOOLS,
+          ...NOTE_TOOLS,
+          ...PROJECT_TOOLS,
+          ...GOAL_TOOLS,
+          ...INSPIRATION_TOOLS,
+          ...INBOX_TOOLS,
+          ...DAILY_LOG_TOOLS,
+          ...CALENDAR_TOOLS,
+        ],
         systemInstruction: {
           parts: [
             {
-              text:
-                TASK_TOOLS_SYSTEM_INSTRUCTION + "\n\n" + MEMORY_SYSTEM_INSTRUCTION,
+              text: [
+                TASK_TOOLS_SYSTEM_INSTRUCTION,
+                MEMORY_SYSTEM_INSTRUCTION,
+                NOTE_TOOLS_SYSTEM_INSTRUCTION,
+                PROJECT_TOOLS_SYSTEM_INSTRUCTION,
+                GOAL_TOOLS_SYSTEM_INSTRUCTION,
+                INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
+                INBOX_TOOLS_SYSTEM_INSTRUCTION,
+                DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
+                CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
+              ].join("\n\n"),
             },
           ],
         },
