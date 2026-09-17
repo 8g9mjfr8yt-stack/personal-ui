@@ -10,7 +10,7 @@ export default function PrivacyPage() {
       <p className="mb-4 text-sm text-neutral-500">Posledná aktualizácia: 17. 9. 2026</p>
 
       <p className="mb-4">
-        „Denný agent" je súkromná osobná aplikácia. Nie je verejná služba —
+        „Denný agent“ je súkromná osobná aplikácia. Nie je verejná služba —
         používa ju výhradne jej autor (michal.kebis.fd@gmail.com) na
         organizáciu vlastných dní, úloh a kalendára.
       </p>
