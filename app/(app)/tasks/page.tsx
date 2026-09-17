@@ -27,9 +27,7 @@ type Project = {
 
 // Interaktívny zoznam úloh nad rovnakou dátovou vrstvou (lib/supabase/tasks.ts),
 // akú používa aj hlasový agent (Fáza 4.4) — takže zmeny odtiaľto aj z hlasu sa
-// navzájom hneď odzrkadlia. Pridané po živom teste 2026-09-14: tlačidlá na
-// dokončenie/zmazanie úlohy a priradenie k projektu (predtým bola stránka iba
-// na čítanie a tieto akcie sa dali robiť len cez hlas).
+// navzájom hneď odzrkadlia. Pridané Realtime počúvanie (2026-09-17).
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -52,7 +50,28 @@ export default function TasksPage() {
   }
 
   useEffect(() => {
+    // 1. Prvé načítanie pri otvorení stránky
     load();
+
+    // 2. Nastavenie Realtime odberu
+    const supabase = createClient();
+    const channel = supabase
+      .channel("realtime-tasks")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks" },
+        () => {
+          // Pri akejkoľvek zmene (INSERT, UPDATE, DELETE) zavoláme load().
+          // Toto zaručí, že sa aplikuje tvoje vlastné filtrovanie a zoraďovanie z getTasks.
+          load();
+        }
+      )
+      .subscribe();
+
+    // 3. Upratanie pri odchode zo stránky
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   function projectName(id: string | null) {
@@ -66,6 +85,7 @@ export default function TasksPage() {
     try {
       const supabase = createClient();
       await completeTask(supabase, id);
+      // load() sa tu už volať nemusí, zavolá ho Realtime, ale necháme to pre istotu
       await load();
     } catch (err) {
       const e = err as Error;

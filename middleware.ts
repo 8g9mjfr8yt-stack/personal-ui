@@ -38,7 +38,12 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/auth");
 
-  if (!user && !isAuthRoute) {
+  // /privacy musí byť verejne dostupná bez prihlásenia — vyžaduje to
+  // Google OAuth consent screen (Privacy Policy URL musí byť čitateľná
+  // aj bez session), pozri PROJECT.md časť 24/25.
+  const isPublicRoute = isAuthRoute || request.nextUrl.pathname.startsWith("/privacy");
+
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
