@@ -1,15 +1,14 @@
-
--- Fáza 4.5 (2026-09-13) — perzistentná pamäť agenta naprieč rozhovormi.
--- Pozri PROJECT.md časť 23, "Tri vrstvy pamäte" / "Hypotézy o používateľovi".
-create table agent_memory (
-  id uuid primary key default gen_random_uuid(),
-  content text not null,
-  category text not null default 'fact', -- fact / preference / pattern / hypothesis / rule
-  status text not null default 'active', -- active / superseded / rejected
-  evidence text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create trigger trg_agent_memory_updated_at before update on agent_memory
-  for each row execute function set_updated_at();
+-- Denný agent — Supabase DB schema.
+--
+-- Tento súbor bol donedávna zastaraný stub (obsahoval iba dodatočne
+-- pridanú tabuľku agent_memory, nie celú schému) — nahradené 2026-09-18
+-- zavedením poriadnej migračnej histórie, aby už nevznikal rozdiel medzi
+-- týmto súborom a realitou v Supabase.
+--
+-- Aktuálny stav schémy: supabase/migrations/0001_baseline_2026-09-18.sql
+-- + všetky ďalšie číslované súbory v supabase/migrations/ (pozri README.md
+-- tamtiež pre postup pri ďalších zmenách).
+--
+-- Chronologická história zmien (prečo/kedy pribudlo ktoré pole): PROJECT.md
+-- v projektových dokumentoch (claude/schema.sql tam obsahuje rovnaký
+-- aktuálny stav ako baseline + migrácie tu).

@@ -41,6 +41,7 @@ export async function createTask(
     start_date?: string | null;
     depends_on_task_id?: string | null;
     context?: string | null;
+    estimated_minutes?: number | null;
   }
 ) {
   const { data, error } = await supabase
@@ -57,6 +58,7 @@ export async function createTask(
       start_date: input.start_date || null,
       depends_on_task_id: input.depends_on_task_id || null,
       context: input.context || null,
+      estimated_minutes: input.estimated_minutes ?? null,
     })
     .select()
     .single();
@@ -77,6 +79,7 @@ export async function updateTask(
     start_date: string | null;
     depends_on_task_id: string | null;
     context: string | null;
+    estimated_minutes: number | null;
   }>
 ) {
   const { id, ...fields } = input;

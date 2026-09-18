@@ -18,7 +18,7 @@ export const TASK_TOOLS: Tool[] = [
       {
         name: "get_tasks",
         description:
-          "Vráti zoznam VŠETKÝCH nedokončených úloh používateľa (vrátane due_date/start_date, depends_on_task_id a context), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", alebo \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id inej úlohy.",
+          "Vráti zoznam VŠETKÝCH nedokončených úloh používateľa (vrátane due_date/start_date, depends_on_task_id, context a estimated_minutes), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\", alebo \"mám voľných 35 minút, čo sa tam zmestí\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id inej úlohy.",
         parameters: { type: Type.OBJECT, properties: {} },
       },
       {
@@ -64,6 +64,11 @@ export const TASK_TOOLS: Tool[] = [
               description:
                 "Voliteľná voľná podmienka/spúšťač, ktorý nie je dátum (napr. 'keď si požičiam vŕtačku', 'keď bude pekný víkend'). Iba sa zapíše — automaticky sa nesleduje.",
             },
+            estimated_minutes: {
+              type: Type.NUMBER,
+              description:
+                "Voliteľný hrubý odhad trvania úlohy v minútach. Ak ho používateľ nepovie a je to bežná malá úloha, môžeš navrhnúť rozumný odhad sám (a spomenúť, že je to len odhad); ak si nie si istý, nechaj prázdne.",
+            },
           },
           required: ["title"],
         },
@@ -98,6 +103,10 @@ export const TASK_TOOLS: Tool[] = [
             context: {
               type: Type.STRING,
               description: "Voľná podmienka/spúšťač, ktorý nie je dátum.",
+            },
+            estimated_minutes: {
+              type: Type.NUMBER,
+              description: "Hrubý odhad trvania úlohy v minútach.",
             },
           },
           required: ["id"],
@@ -175,6 +184,13 @@ Pravidlá:
   Toto pole sa NESLEDUJE automaticky na pozadí — keď sa používateľ neskôr
   spýta "čo môžem teraz urobiť" a spomenie podobnú podmienku, prejdi
   zoznam z get_tasks a nájdi úlohy, ktorých context sedí.
+- Odhad trvania: keď sa používateľ opýta, čo stihne za konkrétny voľný
+  čas (napr. "mám voľných 35 minút, čo sa tam zmestí"), zavolaj get_tasks
+  a porovnaj dostupný čas s estimated_minutes jednotlivých úloh — ponúkni
+  tie, ktoré sa reálne zmestia. Ak úloha nemá estimated_minutes vyplnené,
+  nehovor že sa nezmestí ani že sa zmestí — over sa alebo to úlohu spomeň
+  s poznámkou, že trvanie nie je odhadnuté. Keď používateľ pri vytváraní
+  úlohy sám povie, ako dlho mu to zaberie, ulož to do estimated_minutes.
 - Priradenie k projektu: ak používateľ spomenie, že úloha patrí k
   nejakému projektu (napr. "toto je súčasť projektu X", "priraď to k
   projektu X"), zavolaj get_projects, nájdi správny projekt podľa názvu a

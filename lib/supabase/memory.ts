@@ -24,6 +24,21 @@ export async function getMemory(supabase: SupabaseClient) {
   return data;
 }
 
+// Pre transparentnosť pamäte (PROJECT.md časť 23, "Transparentnosť
+// pamäte") — na rozdiel od getMemory() vyššie (ktorú používa hlasový
+// agent a zámerne vidí iba active) toto vráti VŠETKY záznamy vrátane
+// superseded/rejected, aby používateľ videl aj to, čo agent nahradil
+// alebo zamietol, nie iba aktuálne platné fakty.
+export async function getAllMemory(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("agent_memory")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return data;
+}
+
 export async function createMemory(
   supabase: SupabaseClient,
   input: {

@@ -11,6 +11,7 @@ const links = [
   { href: "/inbox", label: "Inbox" },
   { href: "/inspiration", label: "Inspiration" },
   { href: "/notes", label: "Notes" },
+  { href: "/memory", label: "Pamäť" },
   { href: "/voice", label: "Hlas" },
 ];
 

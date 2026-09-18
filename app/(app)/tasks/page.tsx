@@ -17,6 +17,7 @@ type Task = {
   scheduled_time: string | null;
   depends_on_task_id: string | null;
   context: string | null;
+  estimated_minutes: number | null;
   created_at: string;
 };
 
@@ -168,6 +169,7 @@ export default function TasksPage() {
                 {t.due_date ? `termín: ${t.due_date}` : "bez termínu"}
                 {t.scheduled_time ? ` · čas: ${t.scheduled_time}` : ""}
                 {t.priority ? ` · priorita: ${t.priority}` : ""}
+                {t.estimated_minutes ? ` · ~${t.estimated_minutes} min` : ""}
                 {" · "}
                 stav: {t.status}
               </div>
