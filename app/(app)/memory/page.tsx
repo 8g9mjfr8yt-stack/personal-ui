@@ -62,8 +62,8 @@ export default function MemoryPage() {
       <h1 className="mb-1 text-xl font-semibold">Pamäť</h1>
       <p className="mb-4 text-sm text-neutral-500">
         Čo si agent o tebe pamätá naprieč rozhovormi — vrátane toho, čo bolo
-        nahradené alebo zamietnuté. Úpravy rob hlasom ("zabudni toto", "toto
-        už neplatí"), táto stránka je iba na čítanie.
+        nahradené alebo zamietnuté. Úpravy rob hlasom („zabudni toto“, „toto
+        už neplatí“), táto stránka je iba na čítanie.
       </p>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
