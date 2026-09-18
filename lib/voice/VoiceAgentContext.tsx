@@ -139,6 +139,10 @@ export function VoiceAgentProvider({
   const nextPlayTimeRef = useRef(0);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const cancelledCallIdsRef = useRef<Set<string>>(new Set());
+  // Ochrana proti duplicitnému vykonaniu tool-callov (2026-09-18,
+  // pozri PROJECT.md časť 27/28) — každé fc.id sa smie reálne
+  // vykonať iba raz za celú session.
+  const processedCallIdsRef = useRef<Set<string>>(new Set());
   const aiClientRef = useRef<GoogleGenAI | null>(null);
   const resumptionHandleRef = useRef<string | undefined>(undefined);
   const manualStopRef = useRef(false);
@@ -216,12 +220,30 @@ export function VoiceAgentProvider({
   }
 
   async function handleFunctionCalls(functionCalls: any[]) {
-    console.log("[voice] agent volá nástroje:", functionCalls);
+    // Ak Gemini Live doručí ten istý tool-call opakovane (napr. po
+    // reconnecte/session resumption, kým ešte nedostal potvrdenie na
+    // predchádzajúci pokus), nesmieme ho vykonať znova — pri akciách ako
+    // create_calendar_event/create_task by to vytvorilo duplicitné
+    // záznamy (reálny bug nájdený 2026-09-18, pozri PROJECT.md časť 28).
+    const freshCalls = functionCalls.filter((fc: any) => {
+      if (!fc.id) return true;
+      if (processedCallIdsRef.current.has(fc.id)) {
+        console.log(
+          `[voice] preskakujem duplicitný tool-call ${fc.name} (${fc.id})`
+        );
+        return false;
+      }
+      processedCallIdsRef.current.add(fc.id);
+      return true;
+    });
+    if (!freshCalls.length) return;
+
+    console.log("[voice] agent volá nástroje:", freshCalls);
     const supabase = supabaseRef.current;
     if (!supabase) return;
 
     const responses = await Promise.all(
-      functionCalls.map(async (fc: any) => {
+      freshCalls.map(async (fc: any) => {
         const runner = findToolRunner(fc.name);
         const { result, error } = runner
           ? await runner(supabase, fc.name, fc.args || {})
