@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import NotificationsPrompt from "@/components/NotificationsPrompt";
 
 function todayRange() {
   const now = new Date();
@@ -26,6 +27,8 @@ export default async function TodayPage() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Dnes</h1>
+
+      <NotificationsPrompt />
 
       {error && (
         <p className="text-sm text-red-600">

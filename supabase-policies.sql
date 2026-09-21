@@ -62,3 +62,14 @@ on storage.objects for all
 to authenticated
 using (bucket_id = 'inspiration')
 with check (bucket_id = 'inspiration');
+
+-- Fáza 7.1 (Web Push notifikácie) — push_subscriptions
+create policy "authenticated full access" on push_subscriptions
+  for all to authenticated using (true) with check (true);
+
+grant select, insert, update, delete on push_subscriptions to authenticated;
+
+-- service_role potrebuje čítať/mazať subscriptions z /api/push/send (server-
+-- side route bez authenticated browser session) — service_role má už od
+-- Fázy 1 explicitný GRANT na všetky existujúce aj budúce tabuľky v schéme
+-- public (default privileges), takže tu netreba nič naviac.
