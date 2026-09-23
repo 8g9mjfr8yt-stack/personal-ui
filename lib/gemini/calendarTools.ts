@@ -120,8 +120,65 @@ výskyt (napr. "v piatok" = najbližší piatok) a pri nejasnosti si over aktuá
 dátum z kontextu rozhovoru namiesto hádania.
 `.trim();
 
+// Zistí, či je hodnota "iba dátum" (celodenná udalosť) alebo dátum a čas.
+function isAllDayValue(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+// 2026-09-27 — obojsmerná synchronizácia s tabuľkou `tasks` (pozri
+// lib/supabase/tasks.ts pre opačný smer, úloha → kalendár). Udalosť
+// vytvorená/upravená/zmazaná hlasom cez nástroje nižšie sa zrkadlí ako
+// úloha, nech sa objaví aj v Dnes/Kalendári appky a v rannom prehľade.
+// Zámerne priamy `.insert()`/`.update()`/`.delete()` na `tasks`, NIE
+// createTask/updateTask/deleteTask z lib/supabase/tasks.ts — tie by sa
+// znova pokúsili zapísať späť do Google Kalendára a spôsobili nekonečnú
+// slučku.
+async function mirrorEventCreateToTask(
+  supabase: SupabaseClient,
+  args: Record<string, any>,
+  eventId: string
+) {
+  try {
+    const allDay = isAllDayValue(args.start_datetime);
+    await supabase.from("tasks").insert({
+      title: args.summary,
+      description: args.description || null,
+      due_date: allDay ? args.start_datetime : args.start_datetime.slice(0, 10),
+      scheduled_time: allDay ? null : new Date(args.start_datetime).toISOString(),
+      google_event_id: eventId,
+    });
+  } catch (err) {
+    console.error("Nepodarilo sa zrkadliť novú Calendar udalosť ako úlohu:", err);
+  }
+}
+
+async function mirrorEventUpdateToTask(supabase: SupabaseClient, args: Record<string, any>) {
+  try {
+    const patch: Record<string, unknown> = {};
+    if (args.summary !== undefined) patch.title = args.summary;
+    if (args.description !== undefined) patch.description = args.description;
+    if (args.start_datetime !== undefined) {
+      const allDay = isAllDayValue(args.start_datetime);
+      patch.due_date = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
+      patch.scheduled_time = allDay ? null : new Date(args.start_datetime).toISOString();
+    }
+    if (Object.keys(patch).length === 0) return;
+    await supabase.from("tasks").update(patch).eq("google_event_id", args.event_id);
+  } catch (err) {
+    console.error("Nepodarilo sa zrkadliť úpravu Calendar udalosti do úlohy:", err);
+  }
+}
+
+async function mirrorEventDeleteToTask(supabase: SupabaseClient, eventId: string) {
+  try {
+    await supabase.from("tasks").delete().eq("google_event_id", eventId);
+  } catch (err) {
+    console.error("Nepodarilo sa zrkadliť zmazanie Calendar udalosti do úlohy:", err);
+  }
+}
+
 export async function runCalendarTool(
-  _supabase: SupabaseClient,
+  supabase: SupabaseClient,
   name: string,
   args: Record<string, any>
 ): Promise<{ result?: unknown; error?: string }> {
@@ -129,19 +186,28 @@ export async function runCalendarTool(
     switch (name) {
       case "get_calendar_events":
         return { result: await listCalendarEvents(args as any) };
-      case "create_calendar_event":
+      case "create_calendar_event": {
         if (!args.summary || !args.start_datetime || !args.end_datetime) {
           return {
             error: "Chýba povinné pole 'summary', 'start_datetime' alebo 'end_datetime'.",
           };
         }
-        return { result: await createCalendarEvent(args as any) };
-      case "update_calendar_event":
+        const event = await createCalendarEvent(args as any);
+        await mirrorEventCreateToTask(supabase, args, event.id as string);
+        return { result: event };
+      }
+      case "update_calendar_event": {
         if (!args.event_id) return { error: "Chýba povinné pole 'event_id'." };
-        return { result: await updateCalendarEvent(args as any) };
-      case "delete_calendar_event":
+        const event = await updateCalendarEvent(args as any);
+        await mirrorEventUpdateToTask(supabase, args);
+        return { result: event };
+      }
+      case "delete_calendar_event": {
         if (!args.event_id) return { error: "Chýba povinné pole 'event_id'." };
-        return { result: await deleteCalendarEvent(args.event_id) };
+        const result = await deleteCalendarEvent(args.event_id);
+        await mirrorEventDeleteToTask(supabase, args.event_id);
+        return { result };
+      }
       default:
         return { error: `Neznámy nástroj: ${name}` };
     }

@@ -1,4 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  createCalendarEvent,
+  updateCalendarEvent,
+  deleteCalendarEvent,
+} from "@/lib/googleCalendar";
 
 // Dátová vrstva pre tabuľku `tasks` — priame Supabase volania (RLS cez
 // prihláseného `authenticated` používateľa). Logika zámerne kopíruje 5 n8n
@@ -23,6 +28,95 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Podúloha (parent_task_id not null) sa nikdy nezobrazuje ako top-level
 // položka v Dnes/Kalendár/Projekty zoznamoch — vždy iba vnorená pod svojím
 // rodičom, načítaná cez getSubtasksFor().
+//
+// 2026-09-27 — obojsmerná synchronizácia s Google Kalendárom (migrácia
+// 0006_add_task_google_event_id.sql): úloha s due_date a/alebo
+// scheduled_time si po uložení "postará" o zodpovedajúcu udalosť v Google
+// Kalendári (vytvorí ju, ak ešte nemá google_event_id, inak ju upraví);
+// úloha bez dátumu si zmaže prípadnú predtým vytvorenú udalosť. Toto je
+// best-effort — chyba Google Calendar API sa iba zaloguje a nikdy
+// nezablokuje uloženie úlohy. Opačný smer (nová/upravená/zmazaná udalosť
+// vytvorená hlasom cez create_calendar_event a pod.) je v
+// lib/gemini/calendarTools.ts — úlohy vzniknuté ako zrkadlo skutočnej
+// Google Calendar udalosti nikdy znova nespúšťajú tento smer (zapisujú sa
+// priamym `.update()`/`.insert()`, nie cez createTask/updateTask nižšie),
+// takže sa to nezacyklí.
+
+type SyncableTask = {
+  id: string;
+  title: string;
+  description?: string | null;
+  due_date?: string | null;
+  start_date?: string | null;
+  scheduled_time?: string | null;
+  google_event_id?: string | null;
+};
+
+// O jeden deň neskôr než zadaný YYYY-MM-DD reťazec, počítané z lokálnych
+// (nie UTC) komponentov dátumu — rovnaký princíp ako oprava toISODate v
+// lib/dateUtils.ts, nech sa dátum pri hraničných časových pásmach neposunie.
+function nextDayISO(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + 1);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) {
+  try {
+    const hasDate = !!(task.due_date || task.scheduled_time);
+
+    if (!hasDate) {
+      if (task.google_event_id) {
+        await deleteCalendarEvent(task.google_event_id).catch(() => {});
+        await supabase.from("tasks").update({ google_event_id: null }).eq("id", task.id);
+      }
+      return;
+    }
+
+    let start: string;
+    let end: string;
+    if (task.scheduled_time) {
+      const startD = new Date(task.scheduled_time);
+      const endD = new Date(startD.getTime() + 30 * 60 * 1000);
+      start = startD.toISOString();
+      end = endD.toISOString();
+    } else {
+      // Bez presného času — celodenná udalosť (prípadne viacdňová, ak je
+      // vyplnené aj start_date). Google Calendar čaká `end` = deň PO
+      // poslednom dni okna.
+      const due = task.due_date as string;
+      start = task.start_date || due;
+      end = nextDayISO(due);
+    }
+
+    if (task.google_event_id) {
+      await updateCalendarEvent({
+        event_id: task.google_event_id,
+        summary: task.title,
+        description: task.description ?? undefined,
+        start_datetime: start,
+        end_datetime: end,
+      });
+    } else {
+      const event = await createCalendarEvent({
+        summary: task.title,
+        description: task.description ?? undefined,
+        start_datetime: start,
+        end_datetime: end,
+      });
+      await supabase.from("tasks").update({ google_event_id: event.id }).eq("id", task.id);
+    }
+  } catch (err) {
+    // Best-effort — nesmie zhodiť uloženie úlohy (napr. Google Calendar
+    // refresh token práve vypršal, pozri /api/google-calendar-token).
+    console.error("Nepodarilo sa zosynchronizovať úlohu s Google Kalendárom:", err);
+  }
+}
+
+const SYNC_RELEVANT_FIELDS = ["title", "description", "due_date", "scheduled_time", "start_date"];
 
 export async function getTasks(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -139,6 +233,7 @@ export async function createTask(
     .select()
     .single();
   if (error) throw error;
+  await syncTaskToCalendar(supabase, data);
   return data;
 }
 
@@ -172,6 +267,14 @@ export async function updateTask(
     .select()
     .single();
   if (error) throw error;
+  // Kalendár sa synchronizuje iba keď sa zmenilo niečo, čo ho ovplyvňuje
+  // (názov/popis/dátum/čas), alebo keď úloha už má naviazanú udalosť
+  // (napr. presun medzi projektmi nemení dátum, ale ak by predsalen mala
+  // google_event_id a stratila dátum, treba udalosť zmazať).
+  const touchesSync = SYNC_RELEVANT_FIELDS.some((k) => k in fields);
+  if (touchesSync || data.google_event_id) {
+    await syncTaskToCalendar(supabase, data);
+  }
   return data;
 }
 
@@ -210,6 +313,11 @@ export async function deleteTask(supabase: SupabaseClient, id: string) {
     .select()
     .single();
   if (error) throw error;
+  if (data?.google_event_id) {
+    await deleteCalendarEvent(data.google_event_id).catch((err) =>
+      console.error("Nepodarilo sa zmazať naviazanú Google Calendar udalosť:", err)
+    );
+  }
   return data;
 }
 
