@@ -41,7 +41,7 @@ type Project = { id: string; name: string; accent_color: string | null };
 function taskMeta(t: Task) {
   return t.scheduled_time
     ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })
-    : "bez času";
+    : null;
 }
 
 // Denný agent 2.0 — "Dnes": tasks s due_date = dnes (oprava

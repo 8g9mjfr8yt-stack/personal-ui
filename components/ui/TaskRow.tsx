@@ -15,17 +15,19 @@ export type TaskRowProject = { id: string; name: string };
 // Riadok úlohy zdieľaný medzi Dnes, Kalendár, Projekty a Úlohy (Denný
 // agent 2.0).
 //
-// 2026-09-23 — po reálnom testovaní: rozbalenie/pridanie podúlohy je
-// vždy dostupné (nezávisle od počtu podúloh), pribudlo upraviť/zmazať.
-// 2026-09-24 — tri samostatné bočné tlačidlá nahradené JEDNÝM tlačidlom
-// "⋮" s menu (vrátane "Priradiť k projektu").
-// 2026-09-25 — ďalšia úprava podľa spätnej väzby z reálneho testovania:
-// šípka na rozbalenie a "⋮" menu si vymenili miesto — šípka je teraz
-// samostatné tlačidlo na pravom okraji (tam, kde predtým bolo "⋮"),
-// "⋮" je teraz malé tlačidlo hneď vedľa názvu úlohy. Rozbaľovanie
-// zostáva možné aj klikom na text úlohy. V Dnes a Kalendár (`compactMeta`)
-// sa priorita a počet podúloh v zbalenom stave neukazujú vôbec — až po
-// rozbalení, v samostatnom riadku pod pridelaným projektom.
+// `compactMeta` (Dnes/Kalendár, nastavuje volajúca stránka):
+// - v zbalenom stave sa zobrazuje LEN názov a (ak je) pridelený
+//   projekt — žiadny riadok s časom/prioritou/počtom podúloh a žiadne
+//   "bez času"; "⋮" menu je skryté.
+// - ak úloha má presný čas, zobrazí sa až POD riadkom s projektom
+//   (aj v zbalenom stave).
+// - priorita a počet podúloh sa zobrazia až po rozbalení, v ďalšom
+//   riadku pod časom.
+// - "⋮" menu sa objaví až po rozbalení, umiestnené POD šípkou na
+//   rozbalenie (nie vedľa názvu).
+// Mimo compactMeta (Projekty/Úlohy) je správanie nezmenené: meta text
+// aj počet podúloh v jednom riadku pred projektom, "⋮" vždy vedľa
+// názvu, šípka vždy na pravom okraji.
 //
 // `projectColor`: voliteľná farba akcentu projektu (accent_color) —
 // keď je vyplnená, nahradí predvolenú šalviovú na krúžku/pilulke.
@@ -85,6 +87,7 @@ export default function TaskRow({
   const accent = accentOrDefault(projectColor);
 
   const hasMenu = !!(onEdit || onDelete || onUnassign || (onAssignProject && projects));
+  const showMenuButton = compactMeta ? expanded && hasMenu : hasMenu;
 
   const wrapperClass = bare
     ? "rounded-xl border border-da-border/70"
@@ -93,12 +96,27 @@ export default function TaskRow({
   const priorityLabel = priorityDisplay(priority);
   const subtaskCountLabel = hasSubtasks ? `${doneCount}/${subtasks.length} podúlohy` : null;
 
-  // Kompaktný režim (Dnes/Kalendár): v zbalenom stave len `meta` (čas),
-  // priorita a počet podúloh sa presunú do samostatného riadku pod
-  // pridelaný projekt a zobrazia sa až po rozbalení. Mimo kompaktného
-  // režimu (Projekty/Úlohy) je správanie nezmenené oproti pôvodnému.
-  const metaParts = compactMeta ? [meta].filter(Boolean) : [meta, subtaskCountLabel].filter(Boolean);
-  const detailParts = compactMeta ? [priorityLabel, subtaskCountLabel].filter(Boolean) : [];
+  const metaParts = [meta, subtaskCountLabel].filter(Boolean);
+  const detailParts = [priorityLabel, subtaskCountLabel].filter(Boolean);
+
+  const menuButton = (extraClass: string) =>
+    showMenuButton && (
+      <button
+        type="button"
+        aria-label="Ďalšie možnosti"
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuOpen((v) => !v);
+        }}
+        className={`flex h-6 w-6 shrink-0 items-center justify-center text-da-muted ${extraClass}`}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="5" r="1.7" />
+          <circle cx="12" cy="12" r="1.7" />
+          <circle cx="12" cy="19" r="1.7" />
+        </svg>
+      </button>
+    );
 
   return (
     <div className={`relative ${wrapperClass}`}>
@@ -115,7 +133,7 @@ export default function TaskRow({
           }}
         />
 
-        <div className="flex min-w-0 flex-grow items-start gap-1">
+        {compactMeta ? (
           <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
             <span
               className="block text-[15px] font-semibold"
@@ -126,9 +144,6 @@ export default function TaskRow({
             >
               {title}
             </span>
-            {metaParts.length > 0 && (
-              <span className="mt-0.5 block text-xs text-da-meta">{metaParts.join(" · ")}</span>
-            )}
             {projectLabel && (
               <span
                 className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
@@ -137,50 +152,62 @@ export default function TaskRow({
                 {projectLabel}
               </span>
             )}
+            {meta && <span className="mt-1.5 block text-xs text-da-meta">{meta}</span>}
             {expanded && detailParts.length > 0 && (
               <span className="mt-1.5 block text-xs text-da-meta">{detailParts.join(" · ")}</span>
             )}
           </button>
-
-          {hasMenu && (
-            <button
-              type="button"
-              aria-label="Ďalšie možnosti"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen((v) => !v);
-              }}
-              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-da-muted"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="5" r="1.7" />
-                <circle cx="12" cy="12" r="1.7" />
-                <circle cx="12" cy="19" r="1.7" />
-              </svg>
+        ) : (
+          <div className="flex min-w-0 flex-grow items-start gap-1">
+            <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
+              <span
+                className="block text-[15px] font-semibold"
+                style={{
+                  color: done ? "#9A9384" : "#211E1B",
+                  textDecoration: done ? "line-through" : "none",
+                }}
+              >
+                {title}
+              </span>
+              {metaParts.length > 0 && (
+                <span className="mt-0.5 block text-xs text-da-meta">{metaParts.join(" · ")}</span>
+              )}
+              {projectLabel && (
+                <span
+                  className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
+                  style={{ background: softBg(projectColor), color: softText(projectColor) }}
+                >
+                  {projectLabel}
+                </span>
+              )}
             </button>
-          )}
-        </div>
+            {menuButton("mt-0.5")}
+          </div>
+        )}
 
-        <button
-          type="button"
-          aria-label={expanded ? "Zbaliť" : "Rozbaliť"}
-          onClick={onToggleExpand}
-          className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+        <div className="flex shrink-0 flex-col items-center gap-1.5">
+          <button
+            type="button"
+            aria-label={expanded ? "Zbaliť" : "Rozbaliť"}
+            onClick={onToggleExpand}
+            className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
           >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+          {compactMeta && menuButton("")}
+        </div>
       </div>
 
       {menuOpen && hasMenu && (

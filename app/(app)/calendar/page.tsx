@@ -45,7 +45,7 @@ const SELECTED_DAY_KEY = "da_calendar_selected_day";
 function taskMeta(t: Task) {
   return t.scheduled_time
     ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })
-    : "bez času";
+    : null;
 }
 
 // Denný agent 2.0 — "Kalendár": týždenný pás dní + agenda vybraného dňa
