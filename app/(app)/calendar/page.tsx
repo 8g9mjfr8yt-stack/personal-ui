@@ -491,8 +491,8 @@ export default function CalendarPage() {
       {/* Spodný "pool" panel sa vykresľuje priamo nad BottomChrome cez
           rovnaký fixed kontext — jednoduchšie ako počítať výšku susednej
           fixed lišty, tak ho vykreslíme ako súčasť bežného toku a necháme
-          mu dostatočný spodný padding v layout.tsx (pb-40 na <main>). */}
-      <div className="fixed inset-x-0 bottom-[104px] z-40 mx-auto max-w-3xl px-0">
+          mu dostatočný spodný padding v layout.tsx (pb-24 na <main>). */}
+      <div className="fixed inset-x-0 bottom-[64px] z-40 mx-auto max-w-3xl px-0">
         {poolOpen && (
           <div className="max-h-[280px] overflow-y-auto rounded-t-2xl border border-b-0 border-da-border bg-white px-4 pt-3">
             {pool === null && <p className="py-3 text-sm text-da-muted">Načítavam…</p>}

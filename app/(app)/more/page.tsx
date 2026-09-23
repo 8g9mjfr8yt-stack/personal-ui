@@ -1,14 +1,21 @@
 "use client";
 
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { uploadInboxFile, createInboxItem } from "@/lib/supabase/inbox";
 
 // Denný agent 2.0 — "Viac": rozcestník na Úlohy / Inbox / Inšpirácia /
-// Poznámky / Pamäť (reálne, existujúce stránky, len napojené sem cez
-// skutočné odkazy) + odhlásenie (predtým v hornom NavBar). Plnoobrazovková
-// "Hlas" kategória tu zámerne nie je — hlas je teraz dostupný cez
-// tlačidlo v spodnej compose lište na každej stránke.
+// Poznámky / Pamäť + na spodku sekcie foto-zachytávanie do Inboxu a
+// odhlásenie (predtým v hornom NavBar, teraz úplne dole podľa spätnej
+// väzby — foto-tlačidlo nad odhlásením).
+//
+// 2026-09-24 — foto-zachytávanie sa presunulo sem zo spodnej compose
+// lišty (tá teraz má iba taby + mikrofón v strede). Tlačidlo spustí
+// natívny foťák (capture="environment" na mobile) a odfotená fotka
+// ide rovnakou cestou ako predtým — nahrá sa do Storage a vytvorí sa
+// z nej "image" položka v Inboxe (lib/supabase/inbox.ts).
 const ROWS = [
   { href: "/tasks", label: "Úlohy", icon: "tasks" },
   { href: "/inbox", label: "Inbox", icon: "inbox" },
@@ -19,12 +26,34 @@ const ROWS = [
 
 export default function MorePage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [captureMsg, setCaptureMsg] = useState<string | null>(null);
 
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  async function handleCaptureFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setCapturing(true);
+    setCaptureMsg(null);
+    try {
+      const supabase = createClient();
+      const path = await uploadInboxFile(supabase, file);
+      await createInboxItem(supabase, path, "image");
+      setCaptureMsg("Fotka uložená do Inboxu.");
+    } catch (err) {
+      const e2 = err as Error;
+      setCaptureMsg(e2?.message || "Nepodarilo sa uložiť fotku.");
+    } finally {
+      setCapturing(false);
+    }
   }
 
   return (
@@ -52,6 +81,32 @@ export default function MorePage() {
       </div>
 
       <div className="overflow-hidden rounded-da-card border border-da-border bg-da-card shadow-da-card">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleCaptureFile}
+          className="hidden"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={capturing}
+          className="flex w-full items-center gap-3.5 px-[18px] py-3.5 text-left disabled:opacity-60"
+          style={{ borderBottom: "1px solid #F1EEE7" }}
+        >
+          <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-da-chip-bg text-da-accent">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 8a2 2 0 0 1 2-2h1.6l1.2-1.7A2 2 0 0 1 10.4 3.5h3.2a2 2 0 0 1 1.6.8L16.4 6H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" />
+              <circle cx="12" cy="13" r="3.4" />
+            </svg>
+          </span>
+          <span className="flex-grow text-[15px] font-medium">
+            {capturing ? "Ukladám fotku…" : "Odfotiť do Inboxu"}
+          </span>
+        </button>
+
         <button
           type="button"
           onClick={handleLogout}
@@ -68,6 +123,8 @@ export default function MorePage() {
           <span className="flex-grow text-[15px] font-medium">Odhlásiť sa</span>
         </button>
       </div>
+
+      {captureMsg && <p className="mt-3 text-sm text-da-meta">{captureMsg}</p>}
     </div>
   );
 }

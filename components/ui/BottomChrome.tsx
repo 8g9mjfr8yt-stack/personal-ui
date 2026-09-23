@@ -4,18 +4,21 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useVoiceAgent } from "@/lib/voice/VoiceAgentContext";
 
-// Pripnutá spodná lišta (Denný agent 2.0) — nahrádza pôvodný NavBar +
-// plávajúce VoiceWidget tlačidlo. Dva riadky:
-//   1. compose riadok — foto/capture (vedie do Inboxu, "Capture first."),
-//      textová bublina (tiež do Inboxu — rýchly zápis), a hlasové
-//      tlačidlo napojené na tú istú zdieľanú Gemini Live session
-//      (VoiceAgentContext) ako predtým VoiceWidget.
-//   2. taby — Dnes / Kalendár / Projekty / Viac.
-// Viac je aktívna aj na podstránkach, ktoré sa z nej otvárajú (Úlohy,
-// Inbox, Inšpirácia, Poznámky, Pamäť) — presne ako v prototype.
-const TABS = [
+// Pripnutá spodná lišta (Denný agent 2.0).
+//
+// 2026-09-24 — zjednodušené podľa spätnej väzby: predtým mala lišta
+// dva riadky (compose riadok s foto/text/mikrofón + taby). Compose
+// riadok je preč (foto zachytávanie má teraz vlastné miesto v Viac →
+// pozri app/(app)/more/page.tsx, rýchly text ide priamo cez Inbox).
+// Mikrofón sa presunul do stredu samotného tab baru, medzi Kalendár a
+// Projekty — zvýraznené kruhové tlačidlo, podobne ako "+" v strede
+// spodnej lišty v iných appkách.
+const LEFT_TABS = [
   { href: "/today", label: "Dnes", match: (p: string) => p === "/today" },
   { href: "/calendar", label: "Kalendár", match: (p: string) => p === "/calendar" },
+];
+
+const RIGHT_TABS = [
   { href: "/projects", label: "Projekty", match: (p: string) => p === "/projects" },
   {
     href: "/more",
@@ -40,68 +43,58 @@ export default function BottomChrome() {
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EFEBE3] bg-white">
-      <div className="mx-auto flex max-w-3xl flex-col">
-        <div className="flex items-center gap-2.5 px-4 pb-2 pt-2.5">
-          <Link
-            href="/inbox"
-            aria-label="Rýchly zápis / foto do Inboxu"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-da-chip-bg text-da-meta"
-          >
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 8a2 2 0 0 1 2-2h1.6l1.2-1.7A2 2 0 0 1 10.4 3.5h3.2a2 2 0 0 1 1.6.8L16.4 6H18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8z" />
-              <circle cx="12" cy="13" r="3.4" />
+      <div className="mx-auto flex max-w-3xl items-center justify-around px-2 pb-3 pt-2">
+        {LEFT_TABS.map((tab) => (
+          <TabLink key={tab.href} tab={tab} active={tab.match(pathname || "")} />
+        ))}
+
+        <button
+          type="button"
+          onClick={isBusy ? stop : start}
+          disabled={status === "connecting"}
+          aria-label={isBusy ? "Ukončiť hlasový rozhovor" : "Spustiť hlasový rozhovor"}
+          className="-mt-5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white shadow-lg ring-4 ring-white disabled:opacity-60"
+          style={{ background: VOICE_COLORS[status] || "#5B7F66" }}
+        >
+          {status === "live" ? (
+            <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-white" />
+          ) : status === "connecting" || status === "reconnecting" ? (
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
             </svg>
-          </Link>
+          )}
+        </button>
 
-          <Link
-            href="/inbox"
-            className="flex-grow truncate rounded-full border border-[#EAE5D9] bg-[#F5F3EE] px-4 py-2.5 text-sm text-da-placeholder"
-          >
-            Napíš správu Dennému agentovi…
-          </Link>
-
-          <button
-            type="button"
-            onClick={isBusy ? stop : start}
-            disabled={status === "connecting"}
-            aria-label={isBusy ? "Ukončiť hlasový rozhovor" : "Spustiť hlasový rozhovor"}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-60"
-            style={{ background: VOICE_COLORS[status] || "#5B7F66" }}
-          >
-            {status === "live" ? (
-              <span className="h-3 w-3 animate-pulse rounded-full bg-white" />
-            ) : status === "connecting" || status === "reconnecting" ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-              </svg>
-            )}
-          </button>
-        </div>
-
-        <div className="flex items-center justify-around px-2 pb-3 pt-0.5">
-          {TABS.map((tab) => {
-            const active = tab.match(pathname || "");
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                className="flex flex-col items-center gap-1"
-                style={{ color: active ? "#211E1B" : "#9A9384" }}
-              >
-                <TabIcon label={tab.label} />
-                <span className="text-[10px]" style={{ fontWeight: active ? 600 : 400 }}>
-                  {tab.label}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+        {RIGHT_TABS.map((tab) => (
+          <TabLink key={tab.href} tab={tab} active={tab.match(pathname || "")} />
+        ))}
       </div>
     </div>
+  );
+}
+
+function TabLink({
+  tab,
+  active,
+}: {
+  tab: { href: string; label: string };
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={tab.href}
+      className="flex flex-col items-center gap-1"
+      style={{ color: active ? "#211E1B" : "#9A9384" }}
+    >
+      <TabIcon label={tab.label} />
+      <span className="text-[10px]" style={{ fontWeight: active ? 600 : 400 }}>
+        {tab.label}
+      </span>
+    </Link>
   );
 }
 
