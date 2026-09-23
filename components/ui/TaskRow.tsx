@@ -1,6 +1,6 @@
 "use client";
 
-import ProgressRing from "./ProgressRing";
+import { accentOrDefault, softBg, softText } from "@/lib/colorUtils";
 
 export type SubtaskVM = {
   id: string;
@@ -8,12 +8,21 @@ export type SubtaskVM = {
   done: boolean;
 };
 
-// Riadok úlohy zdieľaný medzi Dnes a Projekty (Denný agent 2.0):
-// - bez podúloh: krúžok je priamo tlačidlo na dokončenie/vrátenie úlohy.
-// - s podúlohami: celý riadok rozbaľuje/zbaľuje zoznam podúloh, krúžok
-//   ukazuje podiel dokončených podúloh (bez čísla).
-// Hotové úlohy NIKDY nemiznú zo zoznamu — len sa vizuálne odlíšia
-// (stlmená farba, prečiarknutie).
+// Riadok úlohy zdieľaný medzi Dnes, Kalendár, Projekty a Úlohy (Denný
+// agent 2.0).
+//
+// Oprava po reálnom testovaní (2026-09-23): predtým sa dalo
+// rozbaliť/pridať podúlohu IBA úlohe, ktorá už nejakú podúlohu mala —
+// úloha bez podúloh nemala žiadnu cestu, ako prvú podúlohu pridať.
+// Teraz je šípka na rozbalenie VŽDY prítomná (nezávisle od počtu
+// podúloh) a panel podúloh vždy obsahuje "+ Pridať podúlohu". Zmazanie
+// bolo predtým dostupné iba pre úlohy bez podúloh a upraviť sa nedalo
+// vôbec — teraz sú upraviť/zmazať vždy prítomné (keď volajúca stránka
+// pošle príslušný handler), plus voliteľné "odobrať" (Kalendár:
+// odstránenie z dňa, oddelené od dokončenia úlohy).
+//
+// `projectColor`: voliteľná farba akcentu projektu (accent_color) —
+// keď je vyplnená, nahradí predvolenú šalviovú na krúžku/pilulke.
 //
 // `bare`: na Dnes je každá úloha svoja vlastná biela karta (default).
 // V Projekty je task-row už vnorený v bielej karte projektu, takže tam
@@ -24,6 +33,7 @@ export default function TaskRow({
   meta,
   done,
   projectLabel,
+  projectColor,
   subtasks,
   expanded,
   busy,
@@ -32,12 +42,15 @@ export default function TaskRow({
   onToggleExpand,
   onToggleSubtask,
   onAddSubtask,
+  onEdit,
   onDelete,
+  onUnassign,
 }: {
   title: string;
   meta?: string | null;
   done: boolean;
   projectLabel?: string | null;
+  projectColor?: string | null;
   subtasks: SubtaskVM[];
   expanded: boolean;
   busy?: boolean;
@@ -46,56 +59,38 @@ export default function TaskRow({
   onToggleExpand?: () => void;
   onToggleSubtask?: (subId: string) => void;
   onAddSubtask?: () => void;
+  onEdit?: () => void;
   onDelete?: () => void;
+  onUnassign?: () => void;
 }) {
   const hasSubtasks = subtasks.length > 0;
   const doneCount = subtasks.filter((s) => s.done).length;
-  const ringPercent = hasSubtasks ? doneCount / subtasks.length : done ? 1 : 0;
+  const accent = accentOrDefault(projectColor);
 
   const wrapperClass = bare
     ? "rounded-xl border border-da-border/70"
     : "rounded-da-card border border-da-border bg-da-card shadow-da-card";
 
+  const metaParts = [meta, hasSubtasks ? `${doneCount}/${subtasks.length} podúlohy` : null].filter(
+    Boolean
+  );
+
   return (
     <div className={wrapperClass}>
-      <div
-        role={hasSubtasks ? "button" : undefined}
-        tabIndex={hasSubtasks ? 0 : undefined}
-        onClick={hasSubtasks ? onToggleExpand : undefined}
-        onKeyDown={
-          hasSubtasks
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onToggleExpand?.();
-                }
-              }
-            : undefined
-        }
-        className={`flex items-center gap-3.5 px-4 py-3.5 ${hasSubtasks ? "cursor-pointer" : ""}`}
-      >
-        {hasSubtasks ? (
-          <span className="shrink-0">
-            <ProgressRing percent={ringPercent} />
-          </span>
-        ) : (
-          <button
-            type="button"
-            aria-label={done ? "Vrátiť medzi nedokončené" : "Označiť ako hotové"}
-            disabled={busy}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleDone();
-            }}
-            className="h-6 w-6 shrink-0 rounded-full border-2 disabled:opacity-50"
-            style={{
-              background: done ? "#5B7F66" : "transparent",
-              borderColor: done ? "#5B7F66" : "#C9C2B4",
-            }}
-          />
-        )}
+      <div className="flex items-center gap-3 px-4 py-3.5">
+        <button
+          type="button"
+          aria-label={done ? "Vrátiť medzi nedokončené" : "Označiť ako hotové"}
+          disabled={busy}
+          onClick={onToggleDone}
+          className="h-6 w-6 shrink-0 rounded-full border-2 disabled:opacity-50"
+          style={{
+            background: done ? accent : "transparent",
+            borderColor: done ? accent : "#C9C2B4",
+          }}
+        />
 
-        <div className="min-w-0 flex-grow">
+        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
           <div
             className="text-[15px] font-semibold"
             style={{
@@ -105,52 +100,87 @@ export default function TaskRow({
           >
             {title}
           </div>
-          {meta && <div className="mt-0.5 text-xs text-da-meta">{meta}</div>}
+          {metaParts.length > 0 && (
+            <div className="mt-0.5 text-xs text-da-meta">{metaParts.join(" · ")}</div>
+          )}
           {projectLabel && (
-            <span className="mt-1.5 inline-block rounded-full bg-da-accent-soft px-2 py-0.5 text-[11px] text-da-accent-soft-text">
+            <span
+              className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
+              style={{ background: softBg(projectColor), color: softText(projectColor) }}
+            >
               {projectLabel}
             </span>
           )}
-        </div>
+        </button>
 
-        {hasSubtasks && (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#9A9384"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="shrink-0"
-            style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
-          >
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        )}
-
-        {!hasSubtasks && onDelete && (
+        <div className="flex shrink-0 items-center gap-0.5">
+          {onEdit && (
+            <button
+              type="button"
+              aria-label={`Upraviť: ${title}`}
+              onClick={onEdit}
+              className="flex h-7 w-7 items-center justify-center text-da-muted"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+          )}
+          {onUnassign && (
+            <button
+              type="button"
+              aria-label={`Odobrať z dňa: ${title}`}
+              onClick={onUnassign}
+              className="flex h-7 w-7 items-center justify-center text-da-muted"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="5" width="18" height="16" rx="3" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <line x1="9" y1="14" x2="15" y2="18" />
+                <line x1="15" y1="14" x2="9" y2="18" />
+              </svg>
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              aria-label={`Zmazať: ${title}`}
+              disabled={busy}
+              onClick={onDelete}
+              className="flex h-7 w-7 items-center justify-center text-da-muted disabled:opacity-50"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
-            aria-label={`Zmazať: ${title}`}
-            disabled={busy}
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="flex h-6 w-6 shrink-0 items-center justify-center text-da-muted disabled:opacity-50"
+            aria-label={expanded ? "Zbaliť podúlohy" : "Rozbaliť podúlohy"}
+            onClick={onToggleExpand}
+            className="flex h-7 w-7 items-center justify-center text-da-muted"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+            >
+              <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
-        )}
+        </div>
       </div>
 
-      {hasSubtasks && expanded && (
-        <div className="flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[52px]">
+      {expanded && (
+        <div className="flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[46px]">
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5">
               <button
@@ -159,8 +189,8 @@ export default function TaskRow({
                 onClick={() => onToggleSubtask?.(s.id)}
                 className="h-[18px] w-[18px] shrink-0 rounded-full border-2"
                 style={{
-                  background: s.done ? "#5B7F66" : "transparent",
-                  borderColor: s.done ? "#5B7F66" : "#C9C2B4",
+                  background: s.done ? accent : "transparent",
+                  borderColor: s.done ? accent : "#C9C2B4",
                 }}
               />
               <span
@@ -171,8 +201,14 @@ export default function TaskRow({
               </span>
             </div>
           ))}
+          {subtasks.length === 0 && <p className="text-xs text-da-muted">Zatiaľ žiadne podúlohy.</p>}
           {onAddSubtask && (
-            <button type="button" onClick={onAddSubtask} className="mt-1 self-start text-sm font-medium text-da-accent">
+            <button
+              type="button"
+              onClick={onAddSubtask}
+              className="mt-1 self-start text-sm font-medium"
+              style={{ color: accent }}
+            >
               + Pridať podúlohu
             </button>
           )}

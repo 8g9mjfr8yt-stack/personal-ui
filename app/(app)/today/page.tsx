@@ -8,30 +8,31 @@ import {
   completeTask,
   uncompleteTask,
   createTask,
+  updateTask,
+  deleteTask,
 } from "@/lib/supabase/tasks";
+import { getProjects } from "@/lib/supabase/projects";
+import { todayISO } from "@/lib/dateUtils";
 import NotificationsPrompt from "@/components/NotificationsPrompt";
 import TaskRow from "@/components/ui/TaskRow";
+import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
 type Task = {
   id: string;
   title: string;
+  description: string | null;
   status: string;
   priority: string | null;
+  project_id: string | null;
   due_date: string | null;
+  start_date: string | null;
   scheduled_time: string | null;
   parent_task_id: string | null;
+  context: string | null;
+  estimated_minutes: number | null;
 };
 
-function todayRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return {
-    start: start.toISOString().slice(0, 10),
-    end: end.toISOString().slice(0, 10),
-  };
-}
+type Project = { id: string; name: string; accent_color: string | null };
 
 function taskMeta(t: Task) {
   const time = t.scheduled_time
@@ -44,23 +45,46 @@ function taskMeta(t: Task) {
   return parts.length > 0 ? parts.join(" · ") : "bez času";
 }
 
-// Denný agent 2.0 — "Dnes": rovnaká dátová vrstva ako predtým (tasks s
-// due_date = dnes), ale hotové úlohy teraz OSTÁVAJÚ v zozname (len
-// vizuálne odlíšené) a pribudli podúlohy (parent_task_id, migrácia
-// 0004) — krúžok vedľa úlohy ukazuje podiel dokončených podúloh.
+// Denný agent 2.0 — "Dnes": tasks s due_date = dnes (oprava
+// 2026-09-23: dnešný rozsah sa teraz počíta cez lokálne dateUtils,
+// pôvodný toISOString().slice(0,10) mohol pri kladnom časovom pásme
+// vrátiť včerajší dátum). Hotové úlohy OSTÁVAJÚ v zozname (len
+// vizuálne odlíšené). Každá úloha sa dá rozbaliť/pridať jej podúlohu
+// bez ohľadu na to, či už nejakú má, upraviť (celý formulár vrátane
+// projektu) aj zmazať — predtým to šlo iba čiastočne alebo vôbec.
 export default function TodayPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
+  const [modalSaving, setModalSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
   async function load() {
     const supabase = createClient();
     try {
-      const { start, end } = todayRange();
-      const taskData = (await getTasksInRange(supabase, start, end)) as Task[];
+      const today = todayISO();
+      // Koniec rozsahu (exkluzívne) = zajtra, počítané z lokálnych
+      // komponentov dátumu (pozri dateUtils.toISODate) — nie cez
+      // toISOString(), ktorá by pre kladné časové pásmo mohla posunúť
+      // dátum o deň.
+      const tomorrowDate = new Date();
+      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+      const end = new Date(tomorrowDate.getFullYear(), tomorrowDate.getMonth(), tomorrowDate.getDate());
+      const endISO = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(
+        end.getDate()
+      ).padStart(2, "0")}`;
+
+      const [taskData, projectData] = await Promise.all([
+        getTasksInRange(supabase, today, endISO) as Promise<Task[]>,
+        getProjects(supabase) as Promise<Project[]>,
+      ]);
       setTasks(taskData);
+      setProjects(projectData);
 
       const subs = (await getSubtasksFor(
         supabase,
@@ -90,6 +114,11 @@ export default function TodayPage() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  function projectFor(id: string | null) {
+    if (!id) return null;
+    return projects.find((p) => p.id === id) || null;
+  }
 
   async function handleToggleDone(task: Task) {
     setBusyId(task.id);
@@ -151,9 +180,81 @@ export default function TodayPage() {
     }
   }
 
+  async function handleDelete(t: Task) {
+    if (!confirm(`Naozaj natrvalo zmazať úlohu "${t.title}"?`)) return;
+    setBusyId(t.id);
+    setError(null);
+    try {
+      const supabase = createClient();
+      await deleteTask(supabase, t.id);
+      await load();
+    } catch (err) {
+      const e = err as Error;
+      setError(e?.message || "Nepodarilo sa zmazať úlohu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openCreate() {
+    setModalError(null);
+    setModalInitial({ due_date: todayISO() });
+  }
+
+  function openEdit(t: Task) {
+    setModalError(null);
+    setModalInitial({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      priority: t.priority,
+      project_id: t.project_id,
+      due_date: t.due_date,
+      start_date: t.start_date,
+      scheduled_time: t.scheduled_time,
+      estimated_minutes: t.estimated_minutes,
+      context: t.context,
+      status: t.status,
+    });
+  }
+
+  async function handleModalSave(values: TaskEditModalValues) {
+    if (!modalInitial) return;
+    setModalSaving(true);
+    setModalError(null);
+    try {
+      const supabase = createClient();
+      if (modalInitial.id) {
+        await updateTask(supabase, { id: modalInitial.id, ...values });
+      } else {
+        await createTask(supabase, values);
+      }
+      setModalInitial(null);
+      await load();
+    } catch (err) {
+      const e = err as Error;
+      setModalError(e?.message || "Nepodarilo sa uložiť úlohu.");
+    } finally {
+      setModalSaving(false);
+    }
+  }
+
   return (
     <div className="px-5 pt-6">
-      <h1 className="mb-1 text-[21px] font-bold">Dnes</h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="text-[21px] font-bold">Dnes</h1>
+        <button
+          type="button"
+          aria-label="Nová úloha"
+          onClick={openCreate}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
       <p className="mb-4 text-sm text-da-meta">
         {new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "long" })}
       </p>
@@ -169,9 +270,10 @@ export default function TodayPage() {
       )}
 
       {tasks !== null && tasks.length > 0 && (
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2.5 pb-4">
           {tasks.map((t) => {
             const subs = subtasksByParent[t.id] || [];
+            const project = projectFor(t.project_id);
             return (
               <TaskRow
                 key={t.id}
@@ -179,6 +281,8 @@ export default function TodayPage() {
                 meta={taskMeta(t)}
                 done={t.status === "done"}
                 busy={busyId === t.id}
+                projectLabel={project?.name}
+                projectColor={project?.accent_color}
                 subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
                 expanded={!!expanded[t.id]}
                 onToggleDone={() => handleToggleDone(t)}
@@ -188,10 +292,23 @@ export default function TodayPage() {
                   if (sub) handleToggleSubtask(sub);
                 }}
                 onAddSubtask={() => handleAddSubtask(t.id)}
+                onEdit={() => openEdit(t)}
+                onDelete={() => handleDelete(t)}
               />
             );
           })}
         </div>
+      )}
+
+      {modalInitial && (
+        <TaskEditModal
+          initial={modalInitial}
+          projects={projects}
+          saving={modalSaving}
+          error={modalError}
+          onSave={handleModalSave}
+          onClose={() => setModalInitial(null)}
+        />
       )}
     </div>
   );

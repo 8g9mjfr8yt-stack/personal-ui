@@ -2,33 +2,41 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getTasksInRange, getUnassignedTasks, updateTask } from "@/lib/supabase/tasks";
+import {
+  getTasksInRange,
+  getUnassignedTasks,
+  getSubtasksFor,
+  updateTask,
+  completeTask,
+  uncompleteTask,
+  createTask,
+  deleteTask,
+} from "@/lib/supabase/tasks";
+import { getProjects } from "@/lib/supabase/projects";
+import { toISODate, startOfWeek } from "@/lib/dateUtils";
+import TaskRow from "@/components/ui/TaskRow";
+import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
 type Task = {
   id: string;
   title: string;
+  description: string | null;
   status: string;
   priority: string | null;
+  project_id: string | null;
   due_date: string | null;
+  start_date: string | null;
   scheduled_time: string | null;
+  parent_task_id: string | null;
   context: string | null;
+  estimated_minutes: number | null;
 };
+
+type Project = { id: string; name: string; accent_color: string | null };
 
 const DAY_LABELS = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
 const POOL_OPEN_KEY = "da_calendar_pool_open";
-
-function toISODate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
-function startOfWeek(d: Date) {
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1) - day;
-  const monday = new Date(d);
-  monday.setDate(d.getDate() + diff);
-  monday.setHours(0, 0, 0, 0);
-  return monday;
-}
+const SELECTED_DAY_KEY = "da_calendar_selected_day";
 
 function taskMeta(t: Task) {
   const time = t.scheduled_time
@@ -38,12 +46,20 @@ function taskMeta(t: Task) {
   return parts.length > 0 ? parts.join(" · ") : "bez času";
 }
 
-// Denný agent 2.0 — nová obrazovka Kalendár: týždenný pás dní + agenda
-// vybraného dňa + spodný "pool" voľných úloh (bez due_date), ktoré sa
-// dajú priradiť na aktuálne vybraný deň, alebo z daného dňa naspäť
-// odstrániť (klik na riadok = due_date -> null). Otvorený/zatvorený
-// stav poolu sa drží v localStorage, aby prežil prepínanie dní aj
-// reload stránky.
+// Denný agent 2.0 — "Kalendár": týždenný pás dní + agenda vybraného dňa
+// + spodný "pool" voľných úloh (bez due_date).
+//
+// Opravy po reálnom testovaní (2026-09-23):
+// - toISODate teraz číta lokálne komponenty dátumu (lib/dateUtils),
+//   nie toISOString() — pôvodná verzia pri kladnom časovom pásme
+//   posúvala všetky dni v páse o jeden deň dozadu, takže sa napr.
+//   pod dnešným dátumom v skutočnosti zvýrazňoval zajtrajší deň.
+// - vybraný deň sa teraz ukladá do localStorage (rovnaký vzor ako
+//   poolOpen), takže prežije prepnutie na inú stránku a späť.
+// - klik na úlohu v agende dňa už úlohu automaticky NEODSTRÁNI z dňa —
+//   krúžok dokončí/vráti úlohu (ako na Dnes), rozbalenie ukáže/pridá
+//   podúlohy, ceruzka upraví, a samostatná ikona (kalendár s krížikom)
+//   slúži na explicitné odobratie z dňa.
 export default function CalendarPage() {
   const today = useMemo(() => new Date(), []);
   const weekDays = useMemo(() => {
@@ -54,13 +70,21 @@ export default function CalendarPage() {
       return d;
     });
   }, [today]);
+  const weekIsoSet = useMemo(() => new Set(weekDays.map((d) => toISODate(d))), [weekDays]);
 
-  const [selectedDay, setSelectedDay] = useState(() => toISODate(new Date()));
+  const [selectedDay, setSelectedDayState] = useState(() => toISODate(new Date()));
   const [tasksByDay, setTasksByDay] = useState<Record<string, Task[]>>({});
+  const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [pool, setPool] = useState<Task[] | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
+  const [modalSaving, setModalSaving] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -69,7 +93,28 @@ export default function CalendarPage() {
     } catch {
       /* localStorage nedostupné — ostane defaultne zbalené */
     }
+    try {
+      const storedDay = window.localStorage.getItem(SELECTED_DAY_KEY);
+      // Obnovíme uložený deň iba ak patrí do aktuálne zobrazeného
+      // týždňa — inak by sa v páse dní nezvýraznilo nič a agenda by
+      // ukazovala prázdny deň, ktorého úlohy sa vôbec nenačítali.
+      if (storedDay && weekIsoSet.has(storedDay)) {
+        setSelectedDayState(storedDay);
+      }
+    } catch {
+      /* localStorage nedostupné — ostane dnešný deň */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function setSelectedDay(iso: string) {
+    setSelectedDayState(iso);
+    try {
+      window.localStorage.setItem(SELECTED_DAY_KEY, iso);
+    } catch {
+      /* ignore */
+    }
+  }
 
   function togglePool() {
     setPoolOpen((prev) => {
@@ -90,9 +135,10 @@ export default function CalendarPage() {
       const endExclusive = toISODate(
         new Date(weekDays[6].getFullYear(), weekDays[6].getMonth(), weekDays[6].getDate() + 1)
       );
-      const [weekTasks, unassigned] = await Promise.all([
+      const [weekTasks, unassigned, projectData] = await Promise.all([
         getTasksInRange(supabase, start, endExclusive) as Promise<Task[]>,
         getUnassignedTasks(supabase) as Promise<Task[]>,
+        getProjects(supabase) as Promise<Project[]>,
       ]);
       const grouped: Record<string, Task[]> = {};
       for (const t of weekTasks) {
@@ -102,6 +148,16 @@ export default function CalendarPage() {
       }
       setTasksByDay(grouped);
       setPool(unassigned);
+      setProjects(projectData);
+
+      const subs = (await getSubtasksFor(supabase, weekTasks.map((t) => t.id))) as Task[];
+      const subGrouped: Record<string, Task[]> = {};
+      for (const s of subs) {
+        const pid = s.parent_task_id as string;
+        if (!subGrouped[pid]) subGrouped[pid] = [];
+        subGrouped[pid].push(s);
+      }
+      setSubtasksByParent(subGrouped);
     } catch (err) {
       const e = err as Error;
       setError(e?.message || "Nepodarilo sa načítať kalendár.");
@@ -120,6 +176,11 @@ export default function CalendarPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function projectFor(id: string | null) {
+    if (!id) return null;
+    return projects.find((p) => p.id === id) || null;
+  }
 
   async function handleUnassign(taskId: string) {
     setBusyId(taskId);
@@ -151,6 +212,111 @@ export default function CalendarPage() {
     }
   }
 
+  async function handleToggleDone(t: Task) {
+    setBusyId(t.id);
+    setError(null);
+    try {
+      const supabase = createClient();
+      if (t.status === "done") await uncompleteTask(supabase, t.id);
+      else await completeTask(supabase, t.id);
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Nepodarilo sa aktualizovať úlohu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleToggleSubtask(s: Task) {
+    setBusyId(s.id);
+    setError(null);
+    try {
+      const supabase = createClient();
+      if (s.status === "done") await uncompleteTask(supabase, s.id);
+      else await completeTask(supabase, s.id);
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Nepodarilo sa aktualizovať podúlohu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleAddSubtask(parentId: string) {
+    const title = window.prompt("Názov podúlohy:");
+    if (!title || !title.trim()) return;
+    setBusyId(parentId);
+    setError(null);
+    try {
+      const supabase = createClient();
+      await createTask(supabase, { title: title.trim(), parent_task_id: parentId });
+      setExpandedTasks((prev) => ({ ...prev, [parentId]: true }));
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Nepodarilo sa pridať podúlohu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleDelete(t: Task) {
+    if (!confirm(`Naozaj natrvalo zmazať úlohu "${t.title}"?`)) return;
+    setBusyId(t.id);
+    setError(null);
+    try {
+      const supabase = createClient();
+      await deleteTask(supabase, t.id);
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Nepodarilo sa zmazať úlohu.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openCreate() {
+    setModalError(null);
+    setModalInitial({ due_date: selectedDay });
+  }
+
+  function openEdit(t: Task) {
+    setModalError(null);
+    setModalInitial({
+      id: t.id,
+      title: t.title,
+      description: t.description,
+      priority: t.priority,
+      project_id: t.project_id,
+      due_date: t.due_date,
+      start_date: t.start_date,
+      scheduled_time: t.scheduled_time,
+      estimated_minutes: t.estimated_minutes,
+      context: t.context,
+      status: t.status,
+    });
+  }
+
+  async function handleModalSave(values: TaskEditModalValues) {
+    if (!modalInitial) return;
+    setModalSaving(true);
+    setModalError(null);
+    try {
+      const supabase = createClient();
+      if (modalInitial.id) {
+        await updateTask(supabase, { id: modalInitial.id, ...values });
+      } else {
+        await createTask(supabase, values);
+      }
+      setModalInitial(null);
+      await load();
+    } catch (err) {
+      const e = err as Error;
+      setModalError(e?.message || "Nepodarilo sa uložiť úlohu.");
+    } finally {
+      setModalSaving(false);
+    }
+  }
+
   const selectedTasks = (tasksByDay[selectedDay] || []).slice().sort((a, b) => {
     if (!a.scheduled_time && !b.scheduled_time) return 0;
     if (!a.scheduled_time) return 1;
@@ -160,8 +326,19 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col">
-      <div className="px-5 pb-3 pt-6">
-        <h1 className="mb-1 text-[21px] font-bold">Kalendár</h1>
+      <div className="flex items-center justify-between px-5 pb-3 pt-6">
+        <h1 className="text-[21px] font-bold">Kalendár</h1>
+        <button
+          type="button"
+          aria-label="Nová úloha na vybraný deň"
+          onClick={openCreate}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       <div className="flex justify-between gap-1 px-4 pb-4">
@@ -198,34 +375,33 @@ export default function CalendarPage() {
         {selectedTasks.length === 0 && (
           <p className="py-6 text-center text-sm text-da-muted">Na tento deň nemáš priradené žiadne úlohy.</p>
         )}
-        {selectedTasks.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => handleUnassign(t.id)}
-            disabled={busyId === t.id}
-            className="flex items-center gap-3.5 rounded-da-card border border-da-border bg-da-card px-4 py-3.5 text-left shadow-da-card disabled:opacity-50"
-          >
-            <span
-              className="h-5 w-5 shrink-0 rounded-full border-2"
-              style={{
-                background: t.status === "done" ? "#5B7F66" : "transparent",
-                borderColor: t.status === "done" ? "#5B7F66" : "#C9C2B4",
+        {selectedTasks.map((t) => {
+          const subs = subtasksByParent[t.id] || [];
+          const project = projectFor(t.project_id);
+          return (
+            <TaskRow
+              key={t.id}
+              title={t.title}
+              meta={taskMeta(t)}
+              done={t.status === "done"}
+              busy={busyId === t.id}
+              projectLabel={project?.name}
+              projectColor={project?.accent_color}
+              subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
+              expanded={!!expandedTasks[t.id]}
+              onToggleDone={() => handleToggleDone(t)}
+              onToggleExpand={() => setExpandedTasks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
+              onToggleSubtask={(subId) => {
+                const sub = subs.find((s) => s.id === subId);
+                if (sub) handleToggleSubtask(sub);
               }}
+              onAddSubtask={() => handleAddSubtask(t.id)}
+              onEdit={() => openEdit(t)}
+              onDelete={() => handleDelete(t)}
+              onUnassign={() => handleUnassign(t.id)}
             />
-            <span className="min-w-0 flex-grow">
-              <span
-                className="block text-[15px] font-medium"
-                style={{
-                  color: t.status === "done" ? "#9A9384" : "#211E1B",
-                  textDecoration: t.status === "done" ? "line-through" : "none",
-                }}
-              >
-                {t.title}
-              </span>
-              <span className="block text-xs text-da-meta">{taskMeta(t)}</span>
-            </span>
-          </button>
-        ))}
+          );
+        })}
       </div>
 
       <div className="h-2" />
@@ -251,6 +427,28 @@ export default function CalendarPage() {
                     <span className="block text-sm font-medium text-da-text">{t.title}</span>
                     {t.context && <span className="block text-xs text-da-meta">{t.context}</span>}
                   </span>
+                  <button
+                    type="button"
+                    aria-label={`Upraviť: ${t.title}`}
+                    onClick={() => openEdit(t)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Zmazať: ${t.title}`}
+                    onClick={() => handleDelete(t)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
                   <button
                     onClick={() => handleAssign(t.id)}
                     disabled={busyId === t.id}
@@ -288,6 +486,17 @@ export default function CalendarPage() {
           </svg>
         </button>
       </div>
+
+      {modalInitial && (
+        <TaskEditModal
+          initial={modalInitial}
+          projects={projects}
+          saving={modalSaving}
+          error={modalError}
+          onSave={handleModalSave}
+          onClose={() => setModalInitial(null)}
+        />
+      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { Type, type Tool } from "@google/genai";
 import {
   getTasks,
+  getSubtasksFor,
   createTask,
   updateTask,
   completeTask,
@@ -12,18 +13,33 @@ import {
 // path). Mená a polia kopírujú n8n tools z Fázy 3; rozdiel je iba v tom,
 // že teraz ich agent volá priamo počas živého rozhovoru a vykonávajú sa
 // ako priame Supabase volania z prehliadača (žiadny n8n v hot path).
+//
+// Denný agent 2.0 (redesign-2-0, 2026-09-23) — pridaná podpora podúloh
+// (parent_task_id, migrácia 0004): get_tasks vie voliteľne vrátiť
+// podúlohy konkrétnej rodičovskej úlohy namiesto top-level zoznamu,
+// create_task vie novú úlohu rovno vytvoriť ako podúlohu, update_task
+// vie úlohu preradiť pod inú (alebo z podúlohy urobiť späť top-level).
 export const TASK_TOOLS: Tool[] = [
   {
     functionDeclarations: [
       {
         name: "get_tasks",
         description:
-          "Vráti zoznam VŠETKÝCH nedokončených úloh používateľa (vrátane due_date/start_date, depends_on_task_id, context a estimated_minutes), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\", alebo \"mám voľných 35 minút, čo sa tam zmestí\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id inej úlohy.",
-        parameters: { type: Type.OBJECT, properties: {} },
+          "Vráti zoznam VŠETKÝCH nedokončených top-level úloh používateľa (vrátane due_date/start_date, depends_on_task_id, context a estimated_minutes), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\", alebo \"mám voľných 35 minút, čo sa tam zmestí\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id/parent_task_id inej úlohy.",
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            parent_task_id: {
+              type: Type.STRING,
+              description:
+                "Voliteľné. Ak vyplnené, namiesto top-level úloh vráti PODÚLOHY tejto konkrétnej rodičovskej úlohy. Najprv over ID rodičovskej úlohy bežným get_tasks bez tohto parametra.",
+            },
+          },
+        },
       },
       {
         name: "create_task",
-        description: "Vytvorí novú úlohu.",
+        description: "Vytvorí novú úlohu (voliteľne ako podúlohu inej úlohy).",
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -59,6 +75,11 @@ export const TASK_TOOLS: Tool[] = [
               description:
                 "Voliteľné ID projektu, ku ktorému táto úloha patrí (zisti cez get_projects podľa názvu, ktorý používateľ spomenul). Použi, keď používateľ povie, že úloha patrí k nejakému projektu.",
             },
+            parent_task_id: {
+              type: Type.STRING,
+              description:
+                "Voliteľné ID rodičovskej úlohy (zisti cez get_tasks). Ak vyplnené, táto úloha sa vytvorí ako PODÚLOHA danej úlohy, nie ako samostatná top-level úloha — použi, keď používateľ chce rozdeliť existujúcu úlohu na menšie kroky ('pridaj podúlohu k X', 'rozdeľ X na kroky').",
+            },
             context: {
               type: Type.STRING,
               description:
@@ -76,7 +97,7 @@ export const TASK_TOOLS: Tool[] = [
       {
         name: "update_task",
         description:
-          "Čiastočne upraví existujúcu úlohu podľa jej ID (napr. presunie termín, zmení názov alebo prioritu). Pošli iba polia, ktoré sa naozaj majú zmeniť — ostatné zostanú nezmenené.",
+          "Čiastočne upraví existujúcu úlohu podľa jej ID (napr. presunie termín, zmení názov, prioritu, alebo ju preradí pod/spod inej úlohy ako podúlohu). Pošli iba polia, ktoré sa naozaj majú zmeniť — ostatné zostanú nezmenené.",
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -99,6 +120,11 @@ export const TASK_TOOLS: Tool[] = [
               type: Type.STRING,
               description:
                 "ID projektu, ku ktorému táto úloha patrí (zisti cez get_projects). Pošli prázdny reťazec na odstránenie priradenia k projektu.",
+            },
+            parent_task_id: {
+              type: Type.STRING,
+              description:
+                "ID rodičovskej úlohy (zisti cez get_tasks) — preradí túto úlohu ako podúlohu danej úlohy. Pošli prázdny reťazec na zrušenie vzťahu podúlohy (úloha sa stane samostatnou top-level úlohou).",
             },
             context: {
               type: Type.STRING,
@@ -169,6 +195,16 @@ Pravidlá:
   urobil).
 - Ak nie je jasné, či používateľ vydáva príkaz alebo len rozmýšľa nahlas,
   radšej sa krátko spýtaj, než aby si niečo vykonal omylom.
+- Podúlohy: ak používateľ chce rozdeliť úlohu na menšie kroky, alebo
+  povie "pridaj podúlohu k X", "rozdeľ X na kroky", najprv (ak ešte
+  nemáš ID z rozhovoru) zavolaj get_tasks bez parametra a nájdi ID úlohy
+  X, potom zavolaj create_task s parent_task_id=ID úlohy X. Ak sa
+  používateľ pýta, aké podúlohy už nejaká úloha má, zavolaj get_tasks s
+  parametrom parent_task_id=ID danej úlohy — podúlohy sa NIKDY
+  nezobrazujú v bežnom zozname get_tasks bez tohto parametra. Preradiť
+  existujúcu úlohu pod inú (alebo z podúlohy naspäť na top-level) sa dá
+  cez update_task s poľom parent_task_id (prázdny reťazec = zrušiť
+  vzťah podúlohy).
 - Časové okno: ak používateľ povie rozsah ("niekedy od utorka do piatka",
   "tento týždeň"), použi start_date (najskôr) aj due_date (najneskôr)
   namiesto toho, aby si si vybral jeden náhodný deň. Ak povie iba jeden
@@ -214,13 +250,26 @@ export async function runTaskTool(
   try {
     switch (name) {
       case "get_tasks":
+        if (args?.parent_task_id) {
+          return { result: await getSubtasksFor(supabase, [args.parent_task_id]) };
+        }
         return { result: await getTasks(supabase) };
       case "create_task":
         if (!args.title) return { error: "Chýba povinné pole 'title'." };
         return { result: await createTask(supabase, args as any) };
-      case "update_task":
+      case "update_task": {
         if (!args.id) return { error: "Chýba povinné pole 'id'." };
-        return { result: await updateTask(supabase, args as any) };
+        // Hlas posiela prázdny reťazec na "vyprázdni toto pole" (viď
+        // popisy nástrojov) — updateTask() to zámerne neprevádza sám
+        // (rozlišuje "neposlané" od "explicitne vyprázdnené"), takže tu
+        // normalizujeme "" -> null iba pre uuid stĺpce, kde by prázdny
+        // reťazec inak spôsobil chybu v DB.
+        const normalized: Record<string, any> = { ...args };
+        for (const key of ["project_id", "parent_task_id", "depends_on_task_id"]) {
+          if (normalized[key] === "") normalized[key] = null;
+        }
+        return { result: await updateTask(supabase, normalized as any) };
+      }
       case "complete_task":
         if (!args.id) return { error: "Chýba povinné pole 'id'." };
         return { result: await completeTask(supabase, args.id) };

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Dátová vrstva pre tabuľku `projects` — rovnaký vzor ako lib/supabase/tasks.ts.
+//
+// Denný agent 2.0 (redesign-2-0, 2026-09-23) — pridané accent_color
+// (migrácia 0005_add_project_color.sql): voliteľná farba, ktorá sa
+// prenáša na projekt aj na jeho úlohy/podúlohy naprieč UI.
 
 export async function getProjects(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -19,6 +23,7 @@ export async function createProject(
     description?: string | null;
     priority?: string | null;
     deadline?: string | null;
+    accent_color?: string | null;
   }
 ) {
   const { data, error } = await supabase
@@ -28,6 +33,7 @@ export async function createProject(
       description: input.description || null,
       priority: input.priority || null,
       deadline: input.deadline || null,
+      accent_color: input.accent_color || null,
     })
     .select()
     .single();
@@ -43,6 +49,7 @@ export async function updateProject(
     status: string;
     priority: string | null;
     deadline: string | null;
+    accent_color: string | null;
   }>
 ) {
   const { id, ...fields } = input;
