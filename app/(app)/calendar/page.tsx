@@ -13,7 +13,8 @@ import {
   deleteTask,
 } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
-import { toISODate, startOfWeek } from "@/lib/dateUtils";
+import { toISODate, startOfWeek, fromISODate, todayISO } from "@/lib/dateUtils";
+import { sortTasksForDisplay } from "@/lib/taskSort";
 import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
@@ -61,15 +62,23 @@ function taskMeta(t: Task) {
 //   podúlohy, ceruzka upraví, a samostatná ikona (kalendár s krížikom)
 //   slúži na explicitné odobratie z dňa.
 export default function CalendarPage() {
-  const today = useMemo(() => new Date(), []);
+  // weekAnchorISO určuje, ktorý týždeň je zobrazený — predtým bol
+  // natvrdo "tento týždeň" (zmrazené pri mount), takže sa nedalo
+  // prepnúť na iný. Teraz sa dá posúvať dopredu/dozadu aj skočiť na
+  // ľubovoľný dátum (pozri goToWeekOffset/jumpToDate nižšie).
+  const [weekAnchorISO, setWeekAnchorISO] = useState(() => todayISO());
   const weekDays = useMemo(() => {
-    const monday = startOfWeek(today);
+    const monday = startOfWeek(fromISODate(weekAnchorISO));
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       return d;
     });
-  }, [today]);
+  }, [weekAnchorISO]);
+  const weekLabel = `${weekDays[0].getDate()}. – ${weekDays[6].getDate()}. ${weekDays[6].toLocaleDateString(
+    "sk-SK",
+    { month: "short" }
+  )}`;
   const weekIsoSet = useMemo(() => new Set(weekDays.map((d) => toISODate(d))), [weekDays]);
 
   const [selectedDay, setSelectedDayState] = useState(() => toISODate(new Date()));
@@ -114,6 +123,32 @@ export default function CalendarPage() {
     } catch {
       /* ignore */
     }
+  }
+
+  function goToWeekOffset(days: number) {
+    // Posunie aj vybraný deň o rovnaký počet dní, nie iba zobrazený
+    // týždeň — inak by po prepnutí týždňa zostal vybraný deň z
+    // predchádzajúceho týždňa (mimo nového rozsahu), agenda by teda
+    // ukazovala prázdno a v páse dní by nič nebolo zvýraznené.
+    const nextAnchor = fromISODate(weekAnchorISO);
+    nextAnchor.setDate(nextAnchor.getDate() + days);
+    setWeekAnchorISO(toISODate(nextAnchor));
+
+    const nextSelected = fromISODate(selectedDay);
+    nextSelected.setDate(nextSelected.getDate() + days);
+    setSelectedDay(toISODate(nextSelected));
+  }
+
+  function jumpToDate(iso: string) {
+    if (!iso) return;
+    setWeekAnchorISO(iso);
+    setSelectedDay(iso);
+  }
+
+  function goToday() {
+    const iso = todayISO();
+    setWeekAnchorISO(iso);
+    setSelectedDay(iso);
   }
 
   function togglePool() {
@@ -175,7 +210,7 @@ export default function CalendarPage() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [weekDays]);
 
   function projectFor(id: string | null) {
     if (!id) return null;
@@ -274,6 +309,20 @@ export default function CalendarPage() {
     }
   }
 
+  async function handleAssignProject(taskId: string, projectId: string | null) {
+    setBusyId(taskId);
+    setError(null);
+    try {
+      const supabase = createClient();
+      await updateTask(supabase, { id: taskId, project_id: projectId });
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Nepodarilo sa priradiť projekt.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function openCreate() {
     setModalError(null);
     setModalInitial({ due_date: selectedDay });
@@ -317,12 +366,7 @@ export default function CalendarPage() {
     }
   }
 
-  const selectedTasks = (tasksByDay[selectedDay] || []).slice().sort((a, b) => {
-    if (!a.scheduled_time && !b.scheduled_time) return 0;
-    if (!a.scheduled_time) return 1;
-    if (!b.scheduled_time) return -1;
-    return a.scheduled_time.localeCompare(b.scheduled_time);
-  });
+  const selectedTasks = sortTasksForDisplay(tasksByDay[selectedDay] || []);
 
   return (
     <div className="flex flex-col">
@@ -337,6 +381,41 @@ export default function CalendarPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between px-4 pb-2">
+        <button
+          type="button"
+          aria-label="Predchádzajúci týždeň"
+          onClick={() => goToWeekOffset(-7)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center text-da-meta"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={goToday} className="text-xs font-medium text-da-meta">
+            {weekLabel}
+          </button>
+          <input
+            type="date"
+            aria-label="Skočiť na dátum"
+            value={selectedDay}
+            onChange={(e) => jumpToDate(e.target.value)}
+            className="rounded-lg border border-da-border bg-da-card px-1.5 py-0.5 text-xs text-da-meta"
+          />
+        </div>
+        <button
+          type="button"
+          aria-label="Nasledujúci týždeň"
+          onClick={() => goToWeekOffset(7)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center text-da-meta"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
       </div>
@@ -399,6 +478,9 @@ export default function CalendarPage() {
               onEdit={() => openEdit(t)}
               onDelete={() => handleDelete(t)}
               onUnassign={() => handleUnassign(t.id)}
+              projects={projects.map((pr) => ({ id: pr.id, name: pr.name }))}
+              currentProjectId={t.project_id}
+              onAssignProject={(pid) => handleAssignProject(t.id, pid)}
             />
           );
         })}

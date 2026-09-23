@@ -21,6 +21,15 @@ export function todayISO(): string {
   return toISODate(new Date());
 }
 
+// Opačná operácia k toISODate() — z "YYYY-MM-DD" spraví lokálny Date
+// objekt (lokálna polnoc). Zámerne nepoužívame `new Date(iso)` — ten
+// parsuje dátumový reťazec ako UTC polnoc podľa špecifikácie, čo je tu
+// zbytočná nejednoznačnosť navyše; radšej rozoberieme komponenty ručne.
+export function fromISODate(iso: string): Date {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 // Začiatok (pondelok, lokálna polnoc) týždňa, ktorý obsahuje daný deň.
 export function startOfWeek(d: Date): Date {
   const day = d.getDay();

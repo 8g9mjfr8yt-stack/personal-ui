@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { accentOrDefault, softBg, softText } from "@/lib/colorUtils";
 
 export type SubtaskVM = {
@@ -8,18 +9,20 @@ export type SubtaskVM = {
   done: boolean;
 };
 
+export type TaskRowProject = { id: string; name: string };
+
 // Riadok úlohy zdieľaný medzi Dnes, Kalendár, Projekty a Úlohy (Denný
 // agent 2.0).
 //
-// Oprava po reálnom testovaní (2026-09-23): predtým sa dalo
-// rozbaliť/pridať podúlohu IBA úlohe, ktorá už nejakú podúlohu mala —
-// úloha bez podúloh nemala žiadnu cestu, ako prvú podúlohu pridať.
-// Teraz je šípka na rozbalenie VŽDY prítomná (nezávisle od počtu
-// podúloh) a panel podúloh vždy obsahuje "+ Pridať podúlohu". Zmazanie
-// bolo predtým dostupné iba pre úlohy bez podúloh a upraviť sa nedalo
-// vôbec — teraz sú upraviť/zmazať vždy prítomné (keď volajúca stránka
-// pošle príslušný handler), plus voliteľné "odobrať" (Kalendár:
-// odstránenie z dňa, oddelené od dokončenia úlohy).
+// 2026-09-23 — po reálnom testovaní: rozbalenie/pridanie podúlohy je
+// vždy dostupné (nezávisle od počtu podúloh), pribudlo upraviť/zmazať.
+// 2026-09-24 — ďalšia úprava podľa spätnej väzby: tri samostatné bočné
+// tlačidlá (ceruzka/kôš/šípka) nahradené JEDNÝM tlačidlom "⋮", ktoré
+// otvorí menu so všetkými možnosťami (vrátane novej "Priradiť k
+// projektu" priamo v menu, bez nutnosti otvárať celý formulár).
+// Rozbaľovanie zostáva ako predtým — klikom na samotný riadok úlohy
+// (teraz aj s malou šípkou-indikátorom rovno v ňom, nie ako vlastné
+// tlačidlo).
 //
 // `projectColor`: voliteľná farba akcentu projektu (accent_color) —
 // keď je vyplnená, nahradí predvolenú šalviovú na krúžku/pilulke.
@@ -45,6 +48,9 @@ export default function TaskRow({
   onEdit,
   onDelete,
   onUnassign,
+  projects,
+  currentProjectId,
+  onAssignProject,
 }: {
   title: string;
   meta?: string | null;
@@ -62,10 +68,16 @@ export default function TaskRow({
   onEdit?: () => void;
   onDelete?: () => void;
   onUnassign?: () => void;
+  projects?: TaskRowProject[];
+  currentProjectId?: string | null;
+  onAssignProject?: (projectId: string | null) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const hasSubtasks = subtasks.length > 0;
   const doneCount = subtasks.filter((s) => s.done).length;
   const accent = accentOrDefault(projectColor);
+
+  const hasMenu = !!(onEdit || onDelete || onUnassign || (onAssignProject && projects));
 
   const wrapperClass = bare
     ? "rounded-xl border border-da-border/70"
@@ -76,7 +88,7 @@ export default function TaskRow({
   );
 
   return (
-    <div className={wrapperClass}>
+    <div className={`relative ${wrapperClass}`}>
       <div className="flex items-center gap-3 px-4 py-3.5">
         <button
           type="button"
@@ -90,94 +102,130 @@ export default function TaskRow({
           }}
         />
 
-        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
-          <div
-            className="text-[15px] font-semibold"
-            style={{
-              color: done ? "#9A9384" : "#211E1B",
-              textDecoration: done ? "line-through" : "none",
-            }}
-          >
-            {title}
-          </div>
-          {metaParts.length > 0 && (
-            <div className="mt-0.5 text-xs text-da-meta">{metaParts.join(" · ")}</div>
-          )}
-          {projectLabel && (
+        <button type="button" onClick={onToggleExpand} className="flex min-w-0 flex-grow items-start gap-1.5 text-left">
+          <span className="min-w-0 flex-grow">
             <span
-              className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
-              style={{ background: softBg(projectColor), color: softText(projectColor) }}
+              className="block text-[15px] font-semibold"
+              style={{
+                color: done ? "#9A9384" : "#211E1B",
+                textDecoration: done ? "line-through" : "none",
+              }}
             >
-              {projectLabel}
+              {title}
             </span>
-          )}
+            {metaParts.length > 0 && (
+              <span className="mt-0.5 block text-xs text-da-meta">{metaParts.join(" · ")}</span>
+            )}
+            {projectLabel && (
+              <span
+                className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
+                style={{ background: softBg(projectColor), color: softText(projectColor) }}
+              >
+                {projectLabel}
+              </span>
+            )}
+          </span>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#C9C2B4"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="mt-1 shrink-0"
+            style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
         </button>
 
-        <div className="flex shrink-0 items-center gap-0.5">
-          {onEdit && (
-            <button
-              type="button"
-              aria-label={`Upraviť: ${title}`}
-              onClick={onEdit}
-              className="flex h-7 w-7 items-center justify-center text-da-muted"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-              </svg>
-            </button>
-          )}
-          {onUnassign && (
-            <button
-              type="button"
-              aria-label={`Odobrať z dňa: ${title}`}
-              onClick={onUnassign}
-              className="flex h-7 w-7 items-center justify-center text-da-muted"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="5" width="18" height="16" rx="3" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-                <line x1="9" y1="14" x2="15" y2="18" />
-                <line x1="15" y1="14" x2="9" y2="18" />
-              </svg>
-            </button>
-          )}
-          {onDelete && (
-            <button
-              type="button"
-              aria-label={`Zmazať: ${title}`}
-              disabled={busy}
-              onClick={onDelete}
-              className="flex h-7 w-7 items-center justify-center text-da-muted disabled:opacity-50"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          )}
+        {hasMenu && (
           <button
             type="button"
-            aria-label={expanded ? "Zbaliť podúlohy" : "Rozbaliť podúlohy"}
-            onClick={onToggleExpand}
-            className="flex h-7 w-7 items-center justify-center text-da-muted"
+            aria-label="Ďalšie možnosti"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
-            >
-              <polyline points="9 18 15 12 9 6" />
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="1.7" />
+              <circle cx="12" cy="12" r="1.7" />
+              <circle cx="12" cy="19" r="1.7" />
             </svg>
           </button>
-        </div>
+        )}
       </div>
+
+      {menuOpen && hasMenu && (
+        <>
+          <button
+            type="button"
+            aria-label="Zavrieť menu"
+            onClick={() => setMenuOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div className="absolute right-3 top-[52px] z-50 flex w-56 flex-col gap-0.5 rounded-2xl border border-da-border bg-white p-1.5 shadow-lg">
+            {onAssignProject && projects && (
+              <label className="flex flex-col gap-1 rounded-xl px-2.5 py-1.5 text-xs text-da-meta">
+                Priradiť k projektu
+                <select
+                  value={currentProjectId || ""}
+                  onChange={(e) => {
+                    onAssignProject(e.target.value || null);
+                    setMenuOpen(false);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-lg border border-da-border px-2 py-1 text-sm text-da-text"
+                >
+                  <option value="">— bez projektu —</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onEdit();
+                }}
+                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-text hover:bg-da-bg"
+              >
+                Upraviť
+              </button>
+            )}
+            {onUnassign && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onUnassign();
+                }}
+                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-text hover:bg-da-bg"
+              >
+                Odobrať z dňa
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete();
+                }}
+                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-danger hover:bg-da-bg"
+              >
+                Zmazať
+              </button>
+            )}
+          </div>
+        </>
+      )}
 
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[46px]">

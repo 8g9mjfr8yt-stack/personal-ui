@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getTasks, getSubtasksFor, updateTask, createTask, deleteTask, completeTask, uncompleteTask } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
 import TaskRow from "@/components/ui/TaskRow";
+import { sortTasksForDisplay } from "@/lib/taskSort";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
 type Task = {
@@ -165,6 +166,21 @@ export default function TasksPage() {
     }
   }
 
+  async function handleAssignProject(taskId: string, projectId: string | null) {
+    setBusyId(taskId);
+    setError(null);
+    try {
+      const supabase = createClient();
+      await updateTask(supabase, { id: taskId, project_id: projectId });
+      await load();
+    } catch (err) {
+      const e = err as Error;
+      setError(e?.message || "Nepodarilo sa priradiť projekt.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   function openCreate() {
     setModalError(null);
     setModalInitial({});
@@ -244,7 +260,7 @@ export default function TasksPage() {
 
       {!error && tasks !== null && tasks.length > 0 && (
         <div className="flex flex-col gap-2.5 pb-4">
-          {tasks.map((t) => {
+          {sortTasksForDisplay(tasks).map((t) => {
             const subs = subtasksByParent[t.id] || [];
             const project = projectFor(t.project_id);
             return (
@@ -267,6 +283,9 @@ export default function TasksPage() {
                 onAddSubtask={() => handleAddSubtask(t.id)}
                 onEdit={() => openEdit(t)}
                 onDelete={() => handleDelete(t)}
+                projects={projects}
+                currentProjectId={t.project_id}
+                onAssignProject={(pid) => handleAssignProject(t.id, pid)}
               />
             );
           })}

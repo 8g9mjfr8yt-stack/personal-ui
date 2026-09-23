@@ -17,6 +17,7 @@ import ProgressRing from "@/components/ui/ProgressRing";
 import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 import { ACCENT_SWATCHES, accentOrDefault } from "@/lib/colorUtils";
+import { sortTasksForDisplay } from "@/lib/taskSort";
 
 type Project = {
   id: string;
@@ -356,6 +357,19 @@ export default function ProjectsPage() {
     }
   }
 
+  async function handleReassignTask(taskId: string, projectId: string | null) {
+    setBusyId(taskId);
+    try {
+      const supabase = createClient();
+      await updateTask(supabase, { id: taskId, project_id: projectId });
+      await load();
+    } catch (err) {
+      setError((err as Error)?.message || "Nepodarilo sa priradiť projekt.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleAssignExisting(projectId: string) {
     const taskId = assignPicks[projectId];
     if (!taskId) return;
@@ -501,7 +515,14 @@ export default function ProjectsPage() {
                 >
                   <ProgressRing percent={percent} size={34} color={accent} />
                   <span className="min-w-0 flex-grow">
-                    <span className="block text-[15px] font-semibold">{p.name}</span>
+                    <span className="flex items-center gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: accent }}
+                      />
+                      <span className="block text-[15px] font-semibold">{p.name}</span>
+                    </span>
                     <span className="mt-0.5 flex items-center gap-2 text-xs text-da-meta">
                       <span
                         className="rounded-full px-2 py-0.5 text-[11px]"
@@ -564,7 +585,7 @@ export default function ProjectsPage() {
                       <span className="text-xs font-semibold uppercase tracking-wide text-da-muted">
                         {g.label}
                       </span>
-                      {groups[g.key].map((t) => {
+                      {sortTasksForDisplay(groups[g.key]).map((t) => {
                         const subs = subtasksByParent[t.id] || [];
                         return (
                           <TaskRow
@@ -587,6 +608,9 @@ export default function ProjectsPage() {
                             onAddSubtask={() => handleAddSubtask(t.id)}
                             onEdit={() => openEditTask(t)}
                             onDelete={() => handleDeleteTask(t)}
+                            projects={(projects || []).map((pr) => ({ id: pr.id, name: pr.name }))}
+                            currentProjectId={t.project_id}
+                            onAssignProject={(pid) => handleReassignTask(t.id, pid)}
                           />
                         );
                       })}
