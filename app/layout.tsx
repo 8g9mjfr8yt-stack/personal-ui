@@ -23,9 +23,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#171717",
+  themeColor: "#FAF8F5",
 };
 
+// Denný agent 2.0 — písmo: pôvodný redizajn (Cowork Design prototyp)
+// používal Google Font "Sora" cez next/font/google, ale to sa pri builde
+// snaží stiahnuť font súbory z fonts.googleapis.com/fonts.gstatic.com —
+// na tomto Macu (a rovnako v cloud sandboxe) je táto sieť nedostupná, čo
+// spôsobovalo, že `next build` (aj `next dev`) visel. Namiesto toho sa
+// používa systémový font stack s podobným zaobleným/geometrickým
+// charakterom (viď tailwind.config.ts, `font-sora`), bez akejkoľvek
+// závislosti na sieti pri builde.
 export default function RootLayout({
   children,
 }: {
@@ -33,7 +41,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="sk">
-      <body className="min-h-screen bg-neutral-50 text-neutral-900">
+      <body className="min-h-screen bg-da-bg font-sora text-da-text">
         {children}
       </body>
     </html>
