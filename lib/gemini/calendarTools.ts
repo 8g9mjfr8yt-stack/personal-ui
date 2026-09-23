@@ -6,6 +6,7 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from "@/lib/googleCalendar";
+import { localDateTimeToISOString } from "@/lib/dateUtils";
 
 export const CALENDAR_TOOLS: Tool[] = [
   {
@@ -144,7 +145,7 @@ async function mirrorEventCreateToTask(
       title: args.summary,
       description: args.description || null,
       due_date: allDay ? args.start_datetime : args.start_datetime.slice(0, 10),
-      scheduled_time: allDay ? null : new Date(args.start_datetime).toISOString(),
+      scheduled_time: allDay ? null : localDateTimeToISOString(args.start_datetime),
       google_event_id: eventId,
     });
   } catch (err) {
@@ -160,7 +161,7 @@ async function mirrorEventUpdateToTask(supabase: SupabaseClient, args: Record<st
     if (args.start_datetime !== undefined) {
       const allDay = isAllDayValue(args.start_datetime);
       patch.due_date = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
-      patch.scheduled_time = allDay ? null : new Date(args.start_datetime).toISOString();
+      patch.scheduled_time = allDay ? null : localDateTimeToISOString(args.start_datetime);
     }
     if (Object.keys(patch).length === 0) return;
     await supabase.from("tasks").update(patch).eq("google_event_id", args.event_id);

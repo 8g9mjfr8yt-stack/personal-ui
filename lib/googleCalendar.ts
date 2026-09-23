@@ -18,8 +18,6 @@ async function getAccessToken(): Promise<string> {
 }
 
 async function calendarFetch(path: string, init?: RequestInit) {
-  // eslint-disable-next-line no-console
-  console.log("[calendar-sync] calendarFetch:", init?.method || "GET", path, init?.body);
   const accessToken = await getAccessToken();
   const res = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
     ...init,
@@ -37,10 +35,7 @@ async function calendarFetch(path: string, init?: RequestInit) {
     throw new Error(body?.error?.message || `Google Calendar API vrátilo chybu ${res.status}.`);
   }
   if (res.status === 204) return null;
-  const json = await res.json();
-  // eslint-disable-next-line no-console
-  console.log("[calendar-sync] calendarFetch OK:", json?.id);
-  return json;
+  return await res.json();
 }
 
 // Prevedie jednoduchý reťazec dátumu/času na formát, ktorý čaká Google

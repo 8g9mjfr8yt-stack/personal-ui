@@ -4,6 +4,7 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from "@/lib/googleCalendar";
+import { localDateTimeToISOString } from "@/lib/dateUtils";
 
 // Dátová vrstva pre tabuľku `tasks` — priame Supabase volania (RLS cez
 // prihláseného `authenticated` používateľa). Logika zámerne kopíruje 5 n8n
@@ -81,34 +82,20 @@ function normalizeScheduledTime(
 ): string | null | undefined {
   if (value === undefined) return undefined;
   if (!value) return null;
-  const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(value);
-  return hasOffset ? value : new Date(value).toISOString();
+  return localDateTimeToISOString(value);
 }
 
 async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) {
-  // eslint-disable-next-line no-console
-  console.log("[calendar-sync] syncTaskToCalendar spustená pre úlohu:", {
-    id: task.id,
-    title: task.title,
-    due_date: task.due_date,
-    scheduled_time: task.scheduled_time,
-    google_event_id: task.google_event_id,
-  });
-  if (typeof window !== "undefined") {
-    window.alert("[calendar-sync] 1/4 spustená pre: " + task.title);
-  }
   try {
     const hasDate = !!(task.due_date || task.scheduled_time);
 
     if (!hasDate) {
-      if (typeof window !== "undefined") window.alert("[calendar-sync] bez dátumu, končím.");
       if (task.google_event_id) {
         await deleteCalendarEvent(task.google_event_id).catch(() => {});
         await supabase.from("tasks").update({ google_event_id: null }).eq("id", task.id);
       }
       return;
     }
-    if (typeof window !== "undefined") window.alert("[calendar-sync] 2/4 má dátum, pokračujem");
 
     let start: string;
     let end: string;
@@ -130,9 +117,6 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
       end = nextDayISO(due);
     }
 
-    if (typeof window !== "undefined") {
-      window.alert("[calendar-sync] 3/4 volám Google API, google_event_id=" + task.google_event_id + " start=" + start + " end=" + end);
-    }
     if (task.google_event_id) {
       await updateCalendarEvent({
         event_id: task.google_event_id,
@@ -148,19 +132,13 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
         start_datetime: start,
         end_datetime: end,
       });
-      if (typeof window !== "undefined") {
-        window.alert("[calendar-sync] 4/4 HOTOVO, event id=" + event.id);
-      }
       await supabase.from("tasks").update({ google_event_id: event.id }).eq("id", task.id);
     }
   } catch (err) {
-    if (typeof window !== "undefined") {
-      window.alert("[calendar-sync] CHYBA: " + ((err as Error)?.message || String(err)));
-    }
     // Best-effort — nesmie zhodiť uloženie úlohy (napr. Google Calendar
     // refresh token práve vypršal, pozri /api/google-calendar-token).
     // eslint-disable-next-line no-console
-    console.error("[calendar-sync] ZLYHALO:", err, (err as Error)?.stack);
+    console.error("[calendar-sync] ZLYHALO:", err);
   }
 }
 

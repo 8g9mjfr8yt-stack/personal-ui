@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { toLocalDateTimeInputValue } from "@/lib/dateUtils";
 
 export type TaskEditModalProject = { id: string; name: string };
 
@@ -60,10 +61,10 @@ export default function TaskEditModal({
   const [dueDate, setDueDate] = useState(initial.due_date || "");
   const [startDate, setStartDate] = useState(initial.start_date || "");
   const [scheduledTime, setScheduledTime] = useState(
-    initial.scheduled_time ? initial.scheduled_time.slice(0, 16) : ""
+    initial.scheduled_time ? toLocalDateTimeInputValue(initial.scheduled_time) : ""
   );
   const [scheduledTimeEnd, setScheduledTimeEnd] = useState(
-    initial.scheduled_time_end ? initial.scheduled_time_end.slice(0, 16) : ""
+    initial.scheduled_time_end ? toLocalDateTimeInputValue(initial.scheduled_time_end) : ""
   );
   const [estimatedMinutes, setEstimatedMinutes] = useState(
     initial.estimated_minutes != null ? String(initial.estimated_minutes) : ""
@@ -83,8 +84,12 @@ export default function TaskEditModal({
       project_id: projectId || null,
       due_date: dueDate || null,
       start_date: startDate || null,
-      scheduled_time: scheduledTime ? new Date(scheduledTime).toISOString() : null,
-      scheduled_time_end: scheduledTimeEnd ? new Date(scheduledTimeEnd).toISOString() : null,
+      // Naschvál BEZ .toISOString() tu — pošleme naivnú lokálnu hodnotu z
+      // <input type="datetime-local"> tak, ako je, a bezpečnú konverziu na
+      // UTC (imúnnu voči Safari rozdielom v parsovaní) urobí
+      // normalizeScheduledTime v lib/supabase/tasks.ts.
+      scheduled_time: scheduledTime || null,
+      scheduled_time_end: scheduledTimeEnd || null,
       estimated_minutes: estimatedMinutes.trim() ? Number(estimatedMinutes) : null,
       context: context.trim() || null,
       status,
