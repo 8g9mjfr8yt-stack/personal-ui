@@ -26,7 +26,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Neautorizované." }, { status: 401 });
   }
 
-  if (currentHourInBratislava() !== 7) {
+  // ?force=1 obíde kontrolu hodiny — na ručné otestovanie obsahu/push
+  // notifikácie kedykoľvek cez curl, bez čakania na 7. hodinu. Stále
+  // chránené CRON_SECRET vyššie, takže to nikto zvonku nezneužije.
+  const url = new URL(request.url);
+  const force = url.searchParams.get("force") === "1";
+  if (!force && currentHourInBratislava() !== 7) {
     return NextResponse.json({ skipped: true, reason: "Mimo 7. hodiny bratislavského času." });
   }
 
