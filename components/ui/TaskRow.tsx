@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { accentOrDefault, softBg, softText } from "@/lib/colorUtils";
+import { priorityDisplay } from "@/lib/taskSort";
 
 export type SubtaskVM = {
   id: string;
@@ -16,13 +17,15 @@ export type TaskRowProject = { id: string; name: string };
 //
 // 2026-09-23 — po reálnom testovaní: rozbalenie/pridanie podúlohy je
 // vždy dostupné (nezávisle od počtu podúloh), pribudlo upraviť/zmazať.
-// 2026-09-24 — ďalšia úprava podľa spätnej väzby: tri samostatné bočné
-// tlačidlá (ceruzka/kôš/šípka) nahradené JEDNÝM tlačidlom "⋮", ktoré
-// otvorí menu so všetkými možnosťami (vrátane novej "Priradiť k
-// projektu" priamo v menu, bez nutnosti otvárať celý formulár).
-// Rozbaľovanie zostáva ako predtým — klikom na samotný riadok úlohy
-// (teraz aj s malou šípkou-indikátorom rovno v ňom, nie ako vlastné
-// tlačidlo).
+// 2026-09-24 — tri samostatné bočné tlačidlá nahradené JEDNÝM tlačidlom
+// "⋮" s menu (vrátane "Priradiť k projektu").
+// 2026-09-25 — ďalšia úprava podľa spätnej väzby z reálneho testovania:
+// šípka na rozbalenie a "⋮" menu si vymenili miesto — šípka je teraz
+// samostatné tlačidlo na pravom okraji (tam, kde predtým bolo "⋮"),
+// "⋮" je teraz malé tlačidlo hneď vedľa názvu úlohy. Rozbaľovanie
+// zostáva možné aj klikom na text úlohy. V Dnes a Kalendár (`compactMeta`)
+// sa priorita a počet podúloh v zbalenom stave neukazujú vôbec — až po
+// rozbalení, v samostatnom riadku pod pridelaným projektom.
 //
 // `projectColor`: voliteľná farba akcentu projektu (accent_color) —
 // keď je vyplnená, nahradí predvolenú šalviovú na krúžku/pilulke.
@@ -34,6 +37,8 @@ export type TaskRowProject = { id: string; name: string };
 export default function TaskRow({
   title,
   meta,
+  priority,
+  compactMeta,
   done,
   projectLabel,
   projectColor,
@@ -54,6 +59,8 @@ export default function TaskRow({
 }: {
   title: string;
   meta?: string | null;
+  priority?: string | null;
+  compactMeta?: boolean;
   done: boolean;
   projectLabel?: string | null;
   projectColor?: string | null;
@@ -83,13 +90,19 @@ export default function TaskRow({
     ? "rounded-xl border border-da-border/70"
     : "rounded-da-card border border-da-border bg-da-card shadow-da-card";
 
-  const metaParts = [meta, hasSubtasks ? `${doneCount}/${subtasks.length} podúlohy` : null].filter(
-    Boolean
-  );
+  const priorityLabel = priorityDisplay(priority);
+  const subtaskCountLabel = hasSubtasks ? `${doneCount}/${subtasks.length} podúlohy` : null;
+
+  // Kompaktný režim (Dnes/Kalendár): v zbalenom stave len `meta` (čas),
+  // priorita a počet podúloh sa presunú do samostatného riadku pod
+  // pridelaný projekt a zobrazia sa až po rozbalení. Mimo kompaktného
+  // režimu (Projekty/Úlohy) je správanie nezmenené oproti pôvodnému.
+  const metaParts = compactMeta ? [meta].filter(Boolean) : [meta, subtaskCountLabel].filter(Boolean);
+  const detailParts = compactMeta ? [priorityLabel, subtaskCountLabel].filter(Boolean) : [];
 
   return (
     <div className={`relative ${wrapperClass}`}>
-      <div className="flex items-center gap-3 px-4 py-3.5">
+      <div className="flex items-center gap-2 px-4 py-3.5">
         <button
           type="button"
           aria-label={done ? "Vrátiť medzi nedokončené" : "Označiť ako hotové"}
@@ -102,8 +115,8 @@ export default function TaskRow({
           }}
         />
 
-        <button type="button" onClick={onToggleExpand} className="flex min-w-0 flex-grow items-start gap-1.5 text-left">
-          <span className="min-w-0 flex-grow">
+        <div className="flex min-w-0 flex-grow items-start gap-1">
+          <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
             <span
               className="block text-[15px] font-semibold"
               style={{
@@ -124,37 +137,50 @@ export default function TaskRow({
                 {projectLabel}
               </span>
             )}
-          </span>
+            {expanded && detailParts.length > 0 && (
+              <span className="mt-1.5 block text-xs text-da-meta">{detailParts.join(" · ")}</span>
+            )}
+          </button>
+
+          {hasMenu && (
+            <button
+              type="button"
+              aria-label="Ďalšie možnosti"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
+              }}
+              className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center text-da-muted"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="1.7" />
+                <circle cx="12" cy="12" r="1.7" />
+                <circle cx="12" cy="19" r="1.7" />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          aria-label={expanded ? "Zbaliť" : "Rozbaliť"}
+          onClick={onToggleExpand}
+          className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+        >
           <svg
             width="14"
             height="14"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="#C9C2B4"
+            stroke="currentColor"
             strokeWidth="2.2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="mt-1 shrink-0"
             style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
           >
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
-
-        {hasMenu && (
-          <button
-            type="button"
-            aria-label="Ďalšie možnosti"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="5" r="1.7" />
-              <circle cx="12" cy="12" r="1.7" />
-              <circle cx="12" cy="19" r="1.7" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {menuOpen && hasMenu && (

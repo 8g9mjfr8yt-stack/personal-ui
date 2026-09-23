@@ -14,6 +14,7 @@ import {
 import { getProjects } from "@/lib/supabase/projects";
 import { todayISO } from "@/lib/dateUtils";
 import { sortTasksForDisplay } from "@/lib/taskSort";
+import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import NotificationsPrompt from "@/components/NotificationsPrompt";
 import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
@@ -35,15 +36,12 @@ type Task = {
 
 type Project = { id: string; name: string; accent_color: string | null };
 
+// Kompaktný meta text pre Dnes — iba čas (priorita a počet podúloh sa
+// zobrazujú až po rozbalení, pozri TaskRow `compactMeta`).
 function taskMeta(t: Task) {
-  const time = t.scheduled_time
-    ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
-  const parts = [time, t.priority ? `${t.priority} priorita` : null].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "bez času";
+  return t.scheduled_time
+    ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })
+    : "bez času";
 }
 
 // Denný agent 2.0 — "Dnes": tasks s due_date = dnes (oprava
@@ -52,18 +50,25 @@ function taskMeta(t: Task) {
 // vrátiť včerajší dátum). Hotové úlohy OSTÁVAJÚ v zozname (len
 // vizuálne odlíšené). Každá úloha sa dá rozbaliť/pridať jej podúlohu
 // bez ohľadu na to, či už nejakú má, upraviť (celý formulár vrátane
-// projektu) aj zmazať — predtým to šlo iba čiastočne alebo vôbec.
+// projektu) aj zmazať.
+//
+// 2026-09-25 — po reálnom testovaní: rozbalené úlohy a scroll pozícia
+// sa teraz ukladajú (usePersistedFlags/useScrollRestore), takže po
+// prepnutí na inú záložku a späť zostane obrazovka presne taká, akú
+// používateľ opustil.
 export default function TodayPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = usePersistedFlags("da_today_expanded");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  useScrollRestore("da_scroll_today", tasks !== null);
 
   async function load() {
     const supabase = createClient();
@@ -295,6 +300,8 @@ export default function TodayPage() {
                 key={t.id}
                 title={t.title}
                 meta={taskMeta(t)}
+                priority={t.priority}
+                compactMeta
                 done={t.status === "done"}
                 busy={busyId === t.id}
                 projectLabel={project?.name}

@@ -11,9 +11,27 @@ const PRIORITY_RANK: Record<string, number> = {
   low: 1,
 };
 
+// Zobrazovaný slovenský štítok priority — DB/hlasový agent môžu uložiť
+// buď anglickú ("high") alebo slovenskú ("vysoká") hodnotu, tu sa obe
+// zjednotia na jeden slovenský tvar použitý v UI (napr. TaskRow).
+const PRIORITY_LABEL: Record<string, string> = {
+  vysoká: "vysoká",
+  high: "vysoká",
+  stredná: "stredná",
+  medium: "stredná",
+  nízka: "nízka",
+  low: "nízka",
+};
+
 function priorityRank(p?: string | null): number {
   if (!p) return 0;
   return PRIORITY_RANK[p.trim().toLowerCase()] ?? 0;
+}
+
+export function priorityDisplay(p?: string | null): string | null {
+  if (!p) return null;
+  const label = PRIORITY_LABEL[p.trim().toLowerCase()];
+  return label ? `${label} priorita` : null;
 }
 
 export function compareTasksForDisplay(

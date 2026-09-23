@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 2026-09-23 — na mobile (iOS Safari) prehliadač automaticky priblíži
+   stránku pri fokuse na akékoľvek pole s font-size < 16px, čo pri
+   formulároch (napr. TaskEditModal) spôsobovalo "orezanie"/nedostupné
+   tlačidlo Uložiť a neuloženie zmien. Na malých obrazovkách preto
+   vynútime aspoň 16px na všetkých vstupných poliach. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}

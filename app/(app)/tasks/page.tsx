@@ -7,6 +7,7 @@ import { getTasks, getSubtasksFor, updateTask, createTask, deleteTask, completeT
 import { getProjects } from "@/lib/supabase/projects";
 import TaskRow from "@/components/ui/TaskRow";
 import { sortTasksForDisplay } from "@/lib/taskSort";
+import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
 type Task = {
@@ -47,17 +48,23 @@ function taskMeta(t: Task) {
 // zdieľaný TaskRow (rozbalenie/podúlohy/farba projektu) + TaskEditModal
 // s plným formulárom (názov, popis, projekt, priorita, termíny, presný
 // čas, odhad trvania, podmienka, stav) na vytvorenie aj úpravu úlohy.
+//
+// 2026-09-25 — rozbalené úlohy a scroll pozícia sa ukladajú (rovnaký
+// vzor ako na Dnes/Kalendár/Projekty), takže prežijú prepnutie na inú
+// záložku a späť.
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [expanded, setExpanded] = usePersistedFlags("da_tasks_expanded");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  useScrollRestore("da_scroll_tasks", tasks !== null);
 
   async function load() {
     const supabase = createClient();

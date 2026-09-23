@@ -15,6 +15,7 @@ import {
 import { getProjects } from "@/lib/supabase/projects";
 import { toISODate, startOfWeek, fromISODate, todayISO } from "@/lib/dateUtils";
 import { sortTasksForDisplay } from "@/lib/taskSort";
+import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
@@ -39,12 +40,12 @@ const DAY_LABELS = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
 const POOL_OPEN_KEY = "da_calendar_pool_open";
 const SELECTED_DAY_KEY = "da_calendar_selected_day";
 
+// Kompaktný meta text pre Kalendár — iba čas (priorita a počet
+// podúloh sa zobrazujú až po rozbalení, pozri TaskRow `compactMeta`).
 function taskMeta(t: Task) {
-  const time = t.scheduled_time
+  return t.scheduled_time
     ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })
-    : null;
-  const parts = [time, t.priority ? `${t.priority} priorita` : null].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "bez času";
+    : "bez času";
 }
 
 // Denný agent 2.0 — "Kalendár": týždenný pás dní + agenda vybraného dňa
@@ -59,8 +60,12 @@ function taskMeta(t: Task) {
 //   poolOpen), takže prežije prepnutie na inú stránku a späť.
 // - klik na úlohu v agende dňa už úlohu automaticky NEODSTRÁNI z dňa —
 //   krúžok dokončí/vráti úlohu (ako na Dnes), rozbalenie ukáže/pridá
-//   podúlohy, ceruzka upraví, a samostatná ikona (kalendár s krížikom)
+//   podúlohy, menu "⋮" upraví, a "Odobrať z dňa" v tom istom menu
 //   slúži na explicitné odobratie z dňa.
+//
+// 2026-09-25 — po reálnom testovaní: rozbalené úlohy a scroll pozícia
+// sa teraz ukladajú, takže po prepnutí na inú záložku a späť zostane
+// obrazovka presne taká, akú používateľ opustil.
 export default function CalendarPage() {
   // weekAnchorISO určuje, ktorý týždeň je zobrazený — predtým bol
   // natvrdo "tento týždeň" (zmrazené pri mount), takže sa nedalo
@@ -84,7 +89,7 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDayState] = useState(() => toISODate(new Date()));
   const [tasksByDay, setTasksByDay] = useState<Record<string, Task[]>>({});
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [expandedTasks, setExpandedTasks] = usePersistedFlags("da_calendar_expanded_tasks");
   const [pool, setPool] = useState<Task[] | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -94,6 +99,8 @@ export default function CalendarPage() {
   const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  useScrollRestore("da_scroll_calendar", pool !== null);
 
   useEffect(() => {
     try {
@@ -462,6 +469,8 @@ export default function CalendarPage() {
               key={t.id}
               title={t.title}
               meta={taskMeta(t)}
+              priority={t.priority}
+              compactMeta
               done={t.status === "done"}
               busy={busyId === t.id}
               projectLabel={project?.name}

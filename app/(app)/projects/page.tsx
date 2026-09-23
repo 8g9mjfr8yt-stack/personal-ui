@@ -18,6 +18,7 @@ import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 import { ACCENT_SWATCHES, accentOrDefault } from "@/lib/colorUtils";
 import { sortTasksForDisplay } from "@/lib/taskSort";
+import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 
 type Project = {
   id: string;
@@ -97,7 +98,7 @@ function ProjectForm({
         placeholder="Názov projektu"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full rounded-lg border border-da-border px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-da-border px-3 py-2 text-base"
         required
         autoFocus
       />
@@ -105,7 +106,7 @@ function ProjectForm({
         placeholder="Popis (nepovinné)"
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        className="w-full rounded-lg border border-da-border px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-da-border px-3 py-2 text-base"
         rows={2}
       />
       <div className="flex gap-2">
@@ -114,13 +115,13 @@ function ProjectForm({
           placeholder="Priorita (nepovinné)"
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
-          className="w-1/2 rounded-lg border border-da-border px-3 py-2 text-sm"
+          className="w-1/2 rounded-lg border border-da-border px-3 py-2 text-base"
         />
         <input
           type="date"
           value={deadline}
           onChange={(e) => setDeadline(e.target.value)}
-          className="w-1/2 rounded-lg border border-da-border px-3 py-2 text-sm"
+          className="w-1/2 rounded-lg border border-da-border px-3 py-2 text-base"
         />
       </div>
 
@@ -188,13 +189,20 @@ function ProjectForm({
 // existujúca úloha (predtým bez projektu/z iného projektu), pridať
 // rovno nová úloha patriaca danému projektu, a každá úloha sa dá
 // upraviť/zmazať (zdieľaný TaskRow + TaskEditModal ako na Dnes/Kalendár).
+//
+// 2026-09-25 — po reálnom testovaní: hlavička projektu mala predtým
+// tri interaktívne prvky (celý riadok, ceruzku, šípku). Teraz je tam
+// v zbalenom stave iba JEDNA šípka na rozbalenie — tlačidlo "Upraviť"
+// sa zobrazí pod ňou až po rozbalení projektu. Rozbalené projekty/úlohy
+// a scroll pozícia sa ukladajú, takže prežijú prepnutie na inú
+// záložku a späť.
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [unassignedTasks, setUnassignedTasks] = useState<Task[]>([]);
   const [tasksByProject, setTasksByProject] = useState<Record<string, Task[]>>({});
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
-  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [expandedProjects, setExpandedProjects] = usePersistedFlags("da_projects_expanded_projects");
+  const [expandedTasks, setExpandedTasks] = usePersistedFlags("da_projects_expanded_tasks");
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -209,6 +217,8 @@ export default function ProjectsPage() {
   const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+
+  useScrollRestore("da_scroll_projects", projects !== null);
 
   async function load() {
     const supabase = createClient();
@@ -537,40 +547,48 @@ export default function ProjectsPage() {
                     </span>
                   </span>
                 </button>
-                <button
-                  type="button"
-                  aria-label={`Upraviť projekt: ${p.name}`}
-                  onClick={() => {
-                    setEditingProjectId(p.id);
-                    setShowCreateForm(false);
-                  }}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExpandedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
-                  aria-label={isExpanded ? "Zbaliť projekt" : "Rozbaliť projekt"}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+
+                {/* 2026-09-25 — jediné tlačidlo na rozbalenie; "Upraviť"
+                    sa zobrazí pod ním až po rozbalení projektu (predtým
+                    bola ceruzka vždy viditeľná vedľa šípky). */}
+                <div className="flex shrink-0 flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedProjects((prev) => ({ ...prev, [p.id]: !prev[p.id] }))}
+                    aria-label={isExpanded ? "Zbaliť projekt" : "Rozbaliť projekt"}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
                   >
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
-                </button>
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                  {isExpanded && (
+                    <button
+                      type="button"
+                      aria-label={`Upraviť projekt: ${p.name}`}
+                      onClick={() => {
+                        setEditingProjectId(p.id);
+                        setShowCreateForm(false);
+                      }}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {p.description && <p className="px-4 pb-3 text-sm text-da-meta">{p.description}</p>}
@@ -632,7 +650,7 @@ export default function ProjectsPage() {
                         <select
                           value={assignPicks[p.id] || ""}
                           onChange={(e) => setAssignPicks((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          className="min-w-0 flex-grow rounded-lg border border-da-border px-2 py-1.5 text-xs"
+                          className="min-w-0 flex-grow rounded-lg border border-da-border px-2 py-1.5 text-sm"
                         >
                           <option value="">— vyber existujúcu úlohu —</option>
                           {unassignedTasks.map((t) => (
