@@ -45,7 +45,16 @@ function toEventTime(value: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return { date: value };
   }
-  return { dateTime: value, timeZone: TIME_ZONE };
+  // 2026-09-24 oprava — ak hodnota už obsahuje explicitný UTC/offset
+  // marker ("Z" z new Date().toISOString(), alebo "+02:00"), Google
+  // Calendar z nej vie presný okamih sám. NEPRIKLADAŤ vtedy aj
+  // `timeZone` — Google API to v kombinácii s absolútnym dateTime
+  // vedelo posunúť o offset navyše (reálny test: udalosti vytvorené
+  // synchronizáciou úloh sa v kalendári ukazovali o 2h posunuté).
+  // `timeZone` priložíme iba k "naivným" hodnotám bez posunu (typicky z
+  // hlasového agenta), kde ju interpretujeme ako bratislavský miestny čas.
+  const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(value);
+  return hasOffset ? { dateTime: value } : { dateTime: value, timeZone: TIME_ZONE };
 }
 
 function simplifyEvent(e: any) {

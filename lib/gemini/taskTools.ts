@@ -58,7 +58,13 @@ export const TASK_TOOLS: Tool[] = [
             },
             scheduled_time: {
               type: Type.STRING,
-              description: "Voliteľný presný naplánovaný čas v ISO 8601 formáte.",
+              description:
+                "Voliteľný presný naplánovaný čas začiatku, napr. 2026-09-24T15:00:00 (bez časového pásma — interpretuje sa ako bratislavský miestny čas).",
+            },
+            scheduled_time_end: {
+              type: Type.STRING,
+              description:
+                "Voliteľný presný čas konca (rovnaký formát ako scheduled_time). Ak nie je zadaný a scheduled_time je vyplnené, appka počíta s dĺžkou 30 minút.",
             },
             start_date: {
               type: Type.STRING,
@@ -107,7 +113,14 @@ export const TASK_TOOLS: Tool[] = [
             status: { type: Type.STRING, description: "napr. todo/in_progress/done" },
             priority: { type: Type.STRING },
             due_date: { type: Type.STRING, description: "YYYY-MM-DD" },
-            scheduled_time: { type: Type.STRING, description: "ISO 8601" },
+            scheduled_time: {
+              type: Type.STRING,
+              description: "Čas začiatku, napr. 2026-09-24T15:00:00 (bratislavský miestny čas).",
+            },
+            scheduled_time_end: {
+              type: Type.STRING,
+              description: "Čas konca (rovnaký formát ako scheduled_time).",
+            },
             start_date: {
               type: Type.STRING,
               description: "YYYY-MM-DD — najskorší deň, kedy sa má úloha robiť.",

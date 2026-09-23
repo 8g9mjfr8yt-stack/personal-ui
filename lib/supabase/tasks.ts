@@ -49,6 +49,7 @@ type SyncableTask = {
   due_date?: string | null;
   start_date?: string | null;
   scheduled_time?: string | null;
+  scheduled_time_end?: string | null;
   google_event_id?: string | null;
 };
 
@@ -62,6 +63,26 @@ function nextDayISO(iso: string): string {
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
   const dd = String(dt.getDate()).padStart(2, "0");
   return `${yy}-${mm}-${dd}`;
+}
+
+// 2026-09-24 oprava — hlasový agent posiela scheduled_time ako "naivný"
+// ISO reťazec bez posunu (napr. "2026-09-24T15:00:00"), myslený ako
+// bratislavský miestny čas. Pri priamom uložení takéhoto reťazca do
+// timestamptz stĺpca ho Postgres/Supabase interpretuje ako UTC (nie
+// bratislavský čas), čo dávalo systematický posun +2h (leto)/+1h
+// (zima) oproti tomu, čo používateľ v skutočnosti povedal. `new
+// Date(naivný_reťazec)` v prehliadači ho interpretuje ako miestny čas
+// PREHLIADAČA (rovnaký princíp, aký TaskEditModal už používa pre ručne
+// zadaný čas) — `.toISOString()` z toho spraví správny UTC okamih.
+// Hodnota, ktorá už má "Z"/offset (z manuálneho formulára, alebo zo
+// zrkadlenia Calendar udalosti), sa nechá bez zmeny.
+function normalizeScheduledTime(
+  value: string | null | undefined
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (!value) return null;
+  const hasOffset = /Z$|[+-]\d{2}:\d{2}$/.test(value);
+  return hasOffset ? value : new Date(value).toISOString();
 }
 
 async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) {
@@ -80,7 +101,11 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
     let end: string;
     if (task.scheduled_time) {
       const startD = new Date(task.scheduled_time);
-      const endD = new Date(startD.getTime() + 30 * 60 * 1000);
+      // Explicitný čas konca (ak ho používateľ zadal) má prednosť pred
+      // defaultnou 30-minútovou dĺžkou.
+      const endD = task.scheduled_time_end
+        ? new Date(task.scheduled_time_end)
+        : new Date(startD.getTime() + 30 * 60 * 1000);
       start = startD.toISOString();
       end = endD.toISOString();
     } else {
@@ -116,7 +141,7 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
   }
 }
 
-const SYNC_RELEVANT_FIELDS = ["title", "description", "due_date", "scheduled_time", "start_date"];
+const SYNC_RELEVANT_FIELDS = ["title", "description", "due_date", "scheduled_time", "scheduled_time_end", "start_date"];
 
 export async function getTasks(supabase: SupabaseClient) {
   const { data, error } = await supabase
@@ -206,6 +231,7 @@ export async function createTask(
     project_id?: string | null;
     due_date?: string | null;
     scheduled_time?: string | null;
+    scheduled_time_end?: string | null;
     start_date?: string | null;
     depends_on_task_id?: string | null;
     context?: string | null;
@@ -223,7 +249,8 @@ export async function createTask(
       // rovnaký detail ako v n8n create_task z Fázy 3.
       project_id: input.project_id || null,
       due_date: input.due_date || null,
-      scheduled_time: input.scheduled_time || null,
+      scheduled_time: normalizeScheduledTime(input.scheduled_time) || null,
+      scheduled_time_end: normalizeScheduledTime(input.scheduled_time_end) || null,
       start_date: input.start_date || null,
       depends_on_task_id: input.depends_on_task_id || null,
       context: input.context || null,
@@ -247,6 +274,7 @@ export async function updateTask(
     project_id: string | null;
     due_date: string | null;
     scheduled_time: string | null;
+    scheduled_time_end: string | null;
     start_date: string | null;
     depends_on_task_id: string | null;
     context: string | null;
@@ -260,6 +288,14 @@ export async function updateTask(
   // Zámerne bez `|| null` fallbackov — čiastočná aktualizácia: neposlané
   // pole ostáva nezmenené, explicitne poslaný null pole vyprázdni.
   // `updated_at` nastavuje DB trigger automaticky (schema.sql).
+  // scheduled_time(_end) normalizujeme iba keď boli naozaj poslané —
+  // pozri normalizeScheduledTime vyššie (naivný reťazec z hlasu → UTC).
+  if ("scheduled_time" in fields) {
+    fields.scheduled_time = normalizeScheduledTime(fields.scheduled_time) ?? null;
+  }
+  if ("scheduled_time_end" in fields) {
+    fields.scheduled_time_end = normalizeScheduledTime(fields.scheduled_time_end) ?? null;
+  }
   const { data, error } = await supabase
     .from("tasks")
     .update(fields)
