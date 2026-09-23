@@ -86,6 +86,14 @@ function normalizeScheduledTime(
 }
 
 async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) {
+  // eslint-disable-next-line no-console
+  console.log("[calendar-sync] syncTaskToCalendar spustená pre úlohu:", {
+    id: task.id,
+    title: task.title,
+    due_date: task.due_date,
+    scheduled_time: task.scheduled_time,
+    google_event_id: task.google_event_id,
+  });
   try {
     const hasDate = !!(task.due_date || task.scheduled_time);
 
@@ -137,7 +145,8 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
   } catch (err) {
     // Best-effort — nesmie zhodiť uloženie úlohy (napr. Google Calendar
     // refresh token práve vypršal, pozri /api/google-calendar-token).
-    console.error("Nepodarilo sa zosynchronizovať úlohu s Google Kalendárom:", err);
+    // eslint-disable-next-line no-console
+    console.error("[calendar-sync] ZLYHALO:", err, (err as Error)?.stack);
   }
 }
 
