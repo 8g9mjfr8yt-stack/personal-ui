@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getNotes, createNote } from "@/lib/supabase/notes";
 
@@ -64,25 +65,28 @@ export default function NotesPage() {
   }
 
   return (
-    <div>
-      <h1 className="mb-4 text-xl font-semibold">Notes</h1>
+    <div className="px-5 pt-6">
+      <Link href="/more" className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-da-placeholder">
+        ‹ Viac
+      </Link>
+      <h1 className="mb-1 text-[21px] font-bold">Poznámky</h1>
 
       <form
         onSubmit={handleSubmit}
-        className="mb-6 space-y-2 rounded-lg border border-neutral-200 p-3"
+        className="mb-5 mt-4 flex flex-col gap-2 rounded-da-card border border-da-border bg-da-card p-3.5 shadow-da-card"
       >
         <input
           type="text"
           placeholder="Nadpis (nepovinné)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
         />
         <textarea
           placeholder="Poznámka"
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
           rows={3}
           required
         />
@@ -91,36 +95,46 @@ export default function NotesPage() {
           placeholder="Tagy oddelené čiarkou (nepovinné)"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
         />
         <button
           type="submit"
           disabled={saving || !content.trim()}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded-full bg-da-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {saving ? "Ukladám…" : "Pridať poznámku"}
         </button>
       </form>
 
-      {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-3 text-sm text-da-danger">{error}</p>}
 
       {notes === null && !error && (
-        <p className="text-neutral-500">Načítavam…</p>
+        <p className="text-da-muted">Načítavam…</p>
       )}
 
       {notes !== null && notes.length === 0 && (
-        <p className="text-neutral-500">Zatiaľ žiadne poznámky.</p>
+        <p className="text-da-muted">Zatiaľ žiadne poznámky.</p>
       )}
 
       {notes !== null && notes.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="flex flex-col gap-3 pb-4">
           {notes.map((n) => (
-            <li key={n.id} className="rounded-lg border border-neutral-200 p-3">
-              {n.title && <div className="font-medium">{n.title}</div>}
-              <div className="text-sm text-neutral-600">{n.content}</div>
+            <li
+              key={n.id}
+              className="rounded-da-card border border-da-border bg-da-card p-3.5 shadow-da-card"
+            >
+              {n.title && <div className="text-[15px] font-bold text-da-text">{n.title}</div>}
+              <div className="mt-0.5 text-sm text-da-meta">{n.content}</div>
               {n.tags && n.tags.length > 0 && (
-                <div className="mt-1 text-xs text-neutral-400">
-                  {n.tags.join(" · ")}
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {n.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full bg-da-chip-bg px-2 py-0.5 text-[11px] text-da-chip-text"
+                    >
+                      {tag}
+                    </span>
+                  ))}
                 </div>
               )}
             </li>

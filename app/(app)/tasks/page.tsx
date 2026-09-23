@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getTasks, updateTask, completeTask, deleteTask } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
@@ -29,6 +30,8 @@ type Project = {
 // Interaktívny zoznam úloh nad rovnakou dátovou vrstvou (lib/supabase/tasks.ts),
 // akú používa aj hlasový agent (Fáza 4.4) — takže zmeny odtiaľto aj z hlasu sa
 // navzájom hneď odzrkadlia. Pridané Realtime počúvanie (2026-09-17).
+// Vizuál prerobený na Denný agent 2.0 (2026-09-22) — dátová vrstva a
+// handlery bez zmeny.
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
@@ -128,43 +131,61 @@ export default function TasksPage() {
   }
 
   return (
-    <div>
-      <h1 className="mb-4 text-xl font-semibold">Tasks</h1>
+    <div className="px-5 pt-6">
+      <Link
+        href="/more"
+        className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-da-placeholder"
+      >
+        ‹ Viac
+      </Link>
+
+      <h1 className="mb-1 text-[21px] font-bold">Úlohy</h1>
+      {!error && tasks !== null && (
+        <p className="mb-4 text-sm text-da-meta">
+          {tasks.length} {tasks.length === 1 ? "úloha" : "úloh"}
+        </p>
+      )}
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       {!error && tasks === null && (
-        <p className="text-neutral-500">Načítavam…</p>
+        <p className="text-da-muted">Načítavam…</p>
       )}
 
       {!error && tasks !== null && tasks.length === 0 && (
-        <p className="text-neutral-500">Žiadne nedokončené úlohy.</p>
+        <p className="text-da-muted">Žiadne nedokončené úlohy.</p>
       )}
 
       {!error && tasks !== null && tasks.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="flex flex-col gap-2.5 pb-4">
           {tasks.map((t) => (
-            <li key={t.id} className="rounded-lg border border-neutral-200 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="font-medium">{t.title}</div>
+            <li
+              key={t.id}
+              className="rounded-da-card border border-da-border bg-da-card px-4 py-3.5 shadow-da-card"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-grow text-[15px] font-semibold text-da-text">
+                  {t.title}
+                </div>
                 <div className="flex shrink-0 gap-2">
                   <button
                     onClick={() => handleComplete(t.id)}
                     disabled={busyId === t.id}
-                    className="rounded-md bg-neutral-900 px-2 py-1 text-xs text-white disabled:opacity-50"
+                    className="rounded-full bg-da-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
                     Dokončiť
                   </button>
                   <button
                     onClick={() => handleDelete(t.id, t.title)}
                     disabled={busyId === t.id}
-                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 disabled:opacity-50"
+                    className="rounded-full border border-da-danger/40 px-3 py-1 text-xs font-medium text-da-danger disabled:opacity-50"
                   >
                     Zmazať
                   </button>
                 </div>
               </div>
-              <div className="text-sm text-neutral-500">
+
+              <div className="mt-0.5 text-xs text-da-meta">
                 {t.start_date ? `od: ${t.start_date} ` : ""}
                 {t.due_date ? `termín: ${t.due_date}` : "bez termínu"}
                 {t.scheduled_time ? ` · čas: ${t.scheduled_time}` : ""}
@@ -173,21 +194,23 @@ export default function TasksPage() {
                 {" · "}
                 stav: {t.status}
               </div>
+
               {t.description && (
-                <div className="mt-1 text-sm text-neutral-600">{t.description}</div>
+                <div className="mt-2 text-sm text-da-text">{t.description}</div>
               )}
               {t.context && (
-                <div className="mt-1 text-sm text-neutral-500">
+                <div className="mt-1 text-sm text-da-meta">
                   podmienka: {t.context}
                 </div>
               )}
-              <div className="mt-2 flex items-center gap-2">
-                <label className="text-xs text-neutral-500">Projekt:</label>
+
+              <div className="mt-3 flex items-center gap-2">
+                <label className="text-xs text-da-meta">Projekt:</label>
                 <select
                   value={t.project_id || ""}
                   onChange={(e) => handleProjectChange(t.id, e.target.value)}
                   disabled={busyId === t.id}
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-xs disabled:opacity-50"
+                  className="rounded-lg border border-da-border px-2 py-1 text-xs disabled:opacity-50"
                 >
                   <option value="">— bez projektu —</option>
                   {projects?.map((p) => (
@@ -197,9 +220,16 @@ export default function TasksPage() {
                   ))}
                 </select>
               </div>
-              <div className="mt-1 text-xs text-neutral-400">
-                id: {t.id} · vytvorené: {t.created_at}
-                {projectName(t.project_id) && ` · projekt: ${projectName(t.project_id)}`}
+
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-da-placeholder">
+                <span>
+                  id: {t.id} · vytvorené: {t.created_at}
+                </span>
+                {projectName(t.project_id) && (
+                  <span className="rounded-full bg-da-chip-bg px-2 py-0.5 text-[11px] text-da-chip-text">
+                    {projectName(t.project_id)}
+                  </span>
+                )}
               </div>
             </li>
           ))}

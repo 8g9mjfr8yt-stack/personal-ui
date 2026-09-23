@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   getInspiration,
@@ -102,32 +103,37 @@ export default function InspirationPage() {
   }
 
   return (
-    <div>
-      <h1 className="mb-4 text-xl font-semibold">Inspiration</h1>
+    <div className="px-5 pt-6">
+      <Link href="/more" className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-da-placeholder">
+        ‹ Viac
+      </Link>
+
+      <h1 className="mb-1 text-[21px] font-bold">Inšpirácia</h1>
+      <p className="mb-5 text-sm text-da-meta">Nápady, odkazy a obrázky na neskôr</p>
 
       <form
         onSubmit={handleSubmit}
-        className="mb-6 space-y-2 rounded-lg border border-neutral-200 p-3"
+        className="mb-5 flex flex-col gap-2 rounded-da-card border border-da-border bg-da-card p-3.5 shadow-da-card"
       >
         <input
           type="text"
           placeholder="Názov (nepovinné)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
         />
         <input
           type="url"
           placeholder="Odkaz / URL (nepovinné)"
           value={sourceUrl}
           onChange={(e) => setSourceUrl(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
         />
         <textarea
           placeholder="Prečo si to ukladáš (nepovinné)"
           value={whySaved}
           onChange={(e) => setWhySaved(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
           rows={2}
         />
         <input
@@ -135,18 +141,18 @@ export default function InspirationPage() {
           placeholder="Tagy oddelené čiarkou (nepovinné)"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-lg border border-da-border px-3 py-2 text-sm text-da-text placeholder:text-da-placeholder"
         />
         <input
           type="file"
           accept="image/*"
           onChange={(e) => setFile(e.target.files?.[0] || null)}
-          className="w-full text-sm"
+          className="w-full text-sm text-da-meta"
         />
         <button
           type="submit"
           disabled={saving || (!title.trim() && !sourceUrl.trim() && !file)}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm text-white disabled:opacity-50"
+          className="rounded-full bg-da-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {saving ? "Ukladám…" : "Uložiť inšpiráciu"}
         </button>
@@ -155,47 +161,61 @@ export default function InspirationPage() {
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
       {items === null && !error && (
-        <p className="text-neutral-500">Načítavam…</p>
+        <p className="text-da-muted">Načítavam…</p>
       )}
 
       {items !== null && items.length === 0 && (
-        <p className="text-neutral-500">Zatiaľ žiadna uložená inšpirácia.</p>
+        <p className="text-da-muted">Zatiaľ žiadna uložená inšpirácia.</p>
       )}
 
       {items !== null && items.length > 0 && (
-        <ul className="space-y-2">
+        <div className="grid grid-cols-1 gap-3 pb-4 sm:grid-cols-2">
           {items.map((i) => (
-            <li key={i.id} className="rounded-lg border border-neutral-200 p-3">
-              <div className="font-medium">{i.title || i.source_url || "(bez názvu)"}</div>
+            <div
+              key={i.id}
+              className="overflow-hidden rounded-da-card border border-da-border bg-da-card shadow-da-card"
+            >
               {i.storage_url && imageUrls[i.id] && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={imageUrls[i.id]}
                   alt={i.title || "inšpirácia"}
-                  className="mt-2 max-h-48 rounded-md object-contain"
+                  className="h-40 w-full object-cover"
                 />
               )}
-              {i.source_url && (
-                <a
-                  href={i.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-blue-600 underline"
-                >
-                  {i.source_url}
-                </a>
-              )}
-              {i.why_saved && (
-                <div className="mt-1 text-sm text-neutral-600">{i.why_saved}</div>
-              )}
-              {i.tags && i.tags.length > 0 && (
-                <div className="mt-1 text-xs text-neutral-400">
-                  {i.tags.join(" · ")}
+              <div className="p-3.5">
+                <div className="text-[15px] font-semibold text-da-text">
+                  {i.title || i.source_url || "(bez názvu)"}
                 </div>
-              )}
-            </li>
+                {i.source_url && (
+                  <a
+                    href={i.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 block truncate text-sm text-da-accent underline"
+                  >
+                    {i.source_url}
+                  </a>
+                )}
+                {i.why_saved && (
+                  <div className="mt-1.5 text-sm text-da-meta">{i.why_saved}</div>
+                )}
+                {i.tags && i.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {i.tags.map((tag, idx) => (
+                      <span
+                        key={`${i.id}-${tag}-${idx}`}
+                        className="rounded-full bg-da-chip-bg px-2 py-0.5 text-[11px] text-da-chip-text"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getAllMemory } from "@/lib/supabase/memory";
 
@@ -58,9 +59,13 @@ export default function MemoryPage() {
   );
 
   return (
-    <div>
-      <h1 className="mb-1 text-xl font-semibold">Pamäť</h1>
-      <p className="mb-4 text-sm text-neutral-500">
+    <div className="px-5 pt-6">
+      <Link href="/more" className="mb-3 inline-flex items-center gap-1.5 text-[13px] text-da-placeholder">
+        ‹ Viac
+      </Link>
+
+      <h1 className="mb-1 text-[21px] font-bold">Pamäť</h1>
+      <p className="mb-4 text-sm text-da-meta">
         Čo si agent o tebe pamätá naprieč rozhovormi — vrátane toho, čo bolo
         nahradené alebo zamietnuté. Úpravy rob hlasom („zabudni toto“, „toto
         už neplatí“), táto stránka je iba na čítanie.
@@ -68,15 +73,16 @@ export default function MemoryPage() {
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex gap-2 overflow-x-auto">
         {["active", "superseded", "rejected", "all"].map((s) => (
           <button
             key={s}
+            type="button"
             onClick={() => setStatusFilter(s)}
             className={
               statusFilter === s
-                ? "rounded-md bg-neutral-900 px-2 py-1 text-xs text-white"
-                : "rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600"
+                ? "shrink-0 rounded-full bg-da-accent px-3.5 py-2 text-xs font-semibold text-white"
+                : "shrink-0 rounded-full bg-da-chip-bg px-3.5 py-2 text-xs text-da-chip-text"
             }
           >
             {s === "all" ? "Všetko" : STATUS_LABEL[s] || s}
@@ -85,33 +91,46 @@ export default function MemoryPage() {
       </div>
 
       {!error && items === null && (
-        <p className="text-neutral-500">Načítavam…</p>
+        <p className="text-da-muted">Načítavam…</p>
       )}
 
       {!error && items !== null && filtered && filtered.length === 0 && (
-        <p className="text-neutral-500">Nič v tejto kategórii.</p>
+        <p className="text-da-muted">Nič v tejto kategórii.</p>
       )}
 
       {!error && filtered && filtered.length > 0 && (
-        <ul className="space-y-2">
+        <div className="flex flex-col gap-3 pb-4">
           {filtered.map((m) => (
-            <li key={m.id} className="rounded-lg border border-neutral-200 p-3">
+            <div
+              key={m.id}
+              className="rounded-da-card border border-da-border bg-da-card p-3.5 shadow-da-card"
+            >
               <div className="flex items-start justify-between gap-2">
-                <div className="font-medium">{m.content}</div>
-                <span className="whitespace-nowrap rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">
+                <div className="text-[15px] font-medium">{m.content}</div>
+                <span className="shrink-0 whitespace-nowrap rounded-full bg-da-accent-soft px-2 py-0.5 text-[11px] text-da-accent-soft-text">
                   {CATEGORY_LABEL[m.category] || m.category}
                 </span>
               </div>
-              <div className="mt-1 text-sm text-neutral-500">
-                stav: {STATUS_LABEL[m.status] || m.status}
+              <div
+                className="mt-1.5 text-sm"
+                style={{
+                  color:
+                    m.status === "active"
+                      ? "#3F5C48"
+                      : m.status === "rejected"
+                      ? "#B4776B"
+                      : "#9A9384",
+                }}
+              >
+                {STATUS_LABEL[m.status] || m.status}
                 {m.evidence ? ` · dôkaz: ${m.evidence}` : ""}
               </div>
-              <div className="mt-1 text-xs text-neutral-400">
-                vytvorené: {m.created_at} · upravené: {m.updated_at}
+              <div className="mt-1.5 text-xs text-da-muted">
+                Zdroj: vytvorené {m.created_at} · aktualizované {m.updated_at}
               </div>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
