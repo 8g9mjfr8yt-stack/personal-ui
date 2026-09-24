@@ -7,7 +7,7 @@
 
 const TIME_ZONE = "Europe/Bratislava";
 
-async function getAccessToken(): Promise<string> {
+export async function getAccessToken(): Promise<string> {
   const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
@@ -76,7 +76,7 @@ export async function getEventsForDate(
     .filter((e: { start: string }) => localDateInBratislava(e.start) === dateISO);
 }
 
-function localDateInBratislava(value: string): string {
+export function localDateInBratislava(value: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value; // celodenná — už je to miestny dátum
   return new Date(value).toLocaleDateString("sv-SE", { timeZone: TIME_ZONE });
 }

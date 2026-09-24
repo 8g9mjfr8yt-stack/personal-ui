@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/morning-brief", "schedule": "15 5 * * *" },
-    { "path": "/api/cron/morning-brief", "schedule": "15 6 * * *" }
+    { "path": "/api/cron/morning-brief", "schedule": "15 6 * * *" },
+    { "path": "/api/cron/renew-calendar-watch", "schedule": "0 3 * * *" }
   ]
 }
