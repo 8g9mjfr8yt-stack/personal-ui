@@ -21,13 +21,14 @@ export type TaskRowProject = { id: string; name: string };
 //   "bez času"; "⋮" menu je skryté.
 // - ak úloha má presný čas, zobrazí sa až POD riadkom s projektom
 //   (aj v zbalenom stave).
-// - priorita a počet podúloh sa zobrazia až po rozbalení, v ďalšom
-//   riadku pod časom.
 // - "⋮" menu sa objaví až po rozbalení, umiestnené POD šípkou na
 //   rozbalenie (nie vedľa názvu).
-// Mimo compactMeta (Projekty/Úlohy) je správanie nezmenené: meta text
-// aj počet podúloh v jednom riadku pred projektom, "⋮" vždy vedľa
-// názvu, šípka vždy na pravom okraji.
+// - 2026-09-24: priorita a počet podúloh sa v kompaktnom režime
+//   NEZOBRAZUJÚ vôbec (ani po rozbalení) — priorita sa naďalej
+//   zobrazuje len mimo compactMeta (Projekty), pozri nižšie.
+// Mimo compactMeta (Projekty/Úlohy) je správanie nezmenené: meta text,
+// priorita (ak je predaná) aj počet podúloh v jednom riadku pred
+// projektom, "⋮" vždy vedľa názvu, šípka vždy na pravom okraji.
 //
 // `projectColor`: voliteľná farba akcentu projektu (accent_color) —
 // keď je vyplnená, nahradí predvolenú šalviovú na krúžku/pilulke.
@@ -96,8 +97,10 @@ export default function TaskRow({
   const priorityLabel = priorityDisplay(priority);
   const subtaskCountLabel = hasSubtasks ? `${doneCount}/${subtasks.length} podúlohy` : null;
 
-  const metaParts = [meta, subtaskCountLabel].filter(Boolean);
-  const detailParts = [priorityLabel, subtaskCountLabel].filter(Boolean);
+  // Priorita a počet podúloh sa (2026-09-24) zobrazujú už len v
+  // nekompaktnom režime (Projekty) — v kompaktnom (Dnes/Kalendár) je táto
+  // informácia zámerne preč, nech rozbalená úloha nezaberá zbytočný riadok.
+  const metaParts = [priorityLabel, meta, subtaskCountLabel].filter(Boolean);
 
   const menuButton = (extraClass: string) =>
     showMenuButton && (
@@ -153,9 +156,6 @@ export default function TaskRow({
               </span>
             )}
             {meta && <span className="mt-1.5 block text-xs text-da-meta">{meta}</span>}
-            {expanded && detailParts.length > 0 && (
-              <span className="mt-1.5 block text-xs text-da-meta">{detailParts.join(" · ")}</span>
-            )}
           </button>
         ) : (
           <div className="flex min-w-0 flex-grow items-start gap-1">
@@ -302,7 +302,6 @@ export default function TaskRow({
               </span>
             </div>
           ))}
-          {subtasks.length === 0 && <p className="text-xs text-da-muted">Zatiaľ žiadne podúlohy.</p>}
           {onAddSubtask && (
             <button
               type="button"

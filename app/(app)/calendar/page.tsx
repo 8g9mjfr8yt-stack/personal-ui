@@ -15,7 +15,8 @@ import {
 import { getProjects } from "@/lib/supabase/projects";
 import { toISODate, startOfWeek, fromISODate, todayISO } from "@/lib/dateUtils";
 import { taskDisplayDays } from "@/lib/taskCalendar";
-import { sortTasksForDisplay } from "@/lib/taskSort";
+import { sortTasksForDisplay, sortPoolTasks, priorityDisplay } from "@/lib/taskSort";
+import { softBg, softText } from "@/lib/colorUtils";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
@@ -138,6 +139,11 @@ export default function CalendarPage() {
   const [expandedTasks, setExpandedTasks] = usePersistedFlags("da_calendar_expanded_tasks");
   const [pool, setPool] = useState<Task[] | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
+  // Rozbalenie voľnej úlohy v poole (šípka) a jej "⋮" menu s
+  // upraviť/vymazať — dve nezávislé, na id kľúčované mapy, pozri
+  // vykreslenie poolu nižšie.
+  const [poolRowOpen, setPoolRowOpen] = useState<Record<string, boolean>>({});
+  const [poolMenuOpen, setPoolMenuOpen] = useState<Record<string, boolean>>({});
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -596,57 +602,122 @@ export default function CalendarPage() {
               <p className="py-3 text-sm text-da-muted">Žiadne voľné úlohy.</p>
             )}
             <div className="flex flex-col gap-2 pb-3">
-              {pool?.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center gap-3 rounded-2xl border border-dashed border-da-border px-3.5 py-2.5"
-                >
-                  <span className="min-w-0 flex-grow">
-                    <span className="block text-sm font-medium text-da-text">{t.title}</span>
-                    {t.context && <span className="block text-xs text-da-meta">{t.context}</span>}
-                    {t.due_date && (
-                      <span className="block text-xs text-da-meta">
-                        {t.start_date && t.start_date !== t.due_date
-                          ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
-                          : `Termín ${formatShortDate(t.due_date)}`}
+              {(pool ? sortPoolTasks(pool) : []).map((t) => {
+                const project = projectFor(t.project_id);
+                const rowOpen = !!poolRowOpen[t.id];
+                const menuOpen = !!poolMenuOpen[t.id];
+                return (
+                  <div
+                    key={t.id}
+                    className="flex flex-col gap-2 rounded-2xl border border-dashed border-da-border px-3.5 py-2.5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="min-w-0 flex-grow">
+                        <span className="block text-sm font-medium text-da-text">{t.title}</span>
+                        <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          {priorityDisplay(t.priority) && (
+                            <span className="text-xs text-da-meta">{priorityDisplay(t.priority)}</span>
+                          )}
+                          {project && (
+                            <span
+                              className="inline-block rounded-full px-2 py-0.5 text-[11px]"
+                              style={{ background: softBg(project.accent_color), color: softText(project.accent_color) }}
+                            >
+                              {project.name}
+                            </span>
+                          )}
+                        </span>
+                        {t.context && <span className="block text-xs text-da-meta">{t.context}</span>}
+                        {t.due_date && (
+                          <span className="block text-xs text-da-meta">
+                            {t.start_date && t.start_date !== t.due_date
+                              ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
+                              : `Termín ${formatShortDate(t.due_date)}`}
+                          </span>
+                        )}
                       </span>
+                      <button
+                        onClick={() => handleAssign(t.id)}
+                        disabled={busyId === t.id}
+                        aria-label={`Priradiť na vybraný deň: ${t.title}`}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-da-accent text-white disabled:opacity-50"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={rowOpen ? "Skryť možnosti" : "Ďalšie možnosti"}
+                        onClick={() =>
+                          setPoolRowOpen((prev) => {
+                            const next = { ...prev, [t.id]: !prev[t.id] };
+                            if (!next[t.id]) setPoolMenuOpen((m) => ({ ...m, [t.id]: false }));
+                            return next;
+                          })
+                        }
+                        className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          style={{ transform: rowOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s ease" }}
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {rowOpen && (
+                      <div className="flex items-center justify-end gap-2 border-t border-da-border/60 pt-2">
+                        {menuOpen && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPoolMenuOpen((prev) => ({ ...prev, [t.id]: false }));
+                                openEdit(t);
+                              }}
+                              className="rounded-full px-2.5 py-1 text-xs font-medium text-da-text hover:bg-da-bg"
+                            >
+                              Upraviť
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPoolMenuOpen((prev) => ({ ...prev, [t.id]: false }));
+                                handleDelete(t);
+                              }}
+                              className="rounded-full px-2.5 py-1 text-xs font-medium text-da-danger hover:bg-da-bg"
+                            >
+                              Vymazať
+                            </button>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          aria-label="Ďalšie možnosti"
+                          onClick={() => setPoolMenuOpen((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="12" cy="5" r="1.7" />
+                            <circle cx="12" cy="12" r="1.7" />
+                            <circle cx="12" cy="19" r="1.7" />
+                          </svg>
+                        </button>
+                      </div>
                     )}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={`Upraviť: ${t.title}`}
-                    onClick={() => openEdit(t)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Zmazať: ${t.title}`}
-                    onClick={() => handleDelete(t)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => handleAssign(t.id)}
-                    disabled={busyId === t.id}
-                    aria-label={`Priradiť na vybraný deň: ${t.title}`}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-da-accent text-white disabled:opacity-50"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                      <line x1="12" y1="5" x2="12" y2="19" />
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

@@ -23,7 +23,7 @@ const PRIORITY_LABEL: Record<string, string> = {
   low: "nízka",
 };
 
-function priorityRank(p?: string | null): number {
+export function priorityRank(p?: string | null): number {
   if (!p) return 0;
   return PRIORITY_RANK[p.trim().toLowerCase()] ?? 0;
 }
@@ -50,4 +50,30 @@ export function sortTasksForDisplay<T extends { scheduled_time?: string | null; 
   tasks: T[]
 ): T[] {
   return tasks.slice().sort(compareTasksForDisplay);
+}
+
+// Poradie v poole "voľných úloh na priradenie" (Kalendár): najprv podľa
+// priority (najvyššia hore), v rámci rovnakej priority podľa najbližšieho
+// termínu (Termín/due_date) — úloha bez termínu sa v rámci svojej priority
+// radí až za úlohy s termínom (počíta sa ako "najvzdialenejší" termín).
+// Najmenej prioritné/bez priority úlohy s najvzdialenejším (alebo žiadnym)
+// termínom tak skončia úplne na konci.
+export function comparePoolTasks(
+  a: { priority?: string | null; due_date?: string | null },
+  b: { priority?: string | null; due_date?: string | null }
+): number {
+  const rankDiff = priorityRank(b.priority) - priorityRank(a.priority);
+  if (rankDiff !== 0) return rankDiff;
+  const ad = a.due_date;
+  const bd = b.due_date;
+  if (ad && bd) return ad.localeCompare(bd);
+  if (ad && !bd) return -1;
+  if (!ad && bd) return 1;
+  return 0;
+}
+
+export function sortPoolTasks<T extends { priority?: string | null; due_date?: string | null }>(
+  tasks: T[]
+): T[] {
+  return tasks.slice().sort(comparePoolTasks);
 }

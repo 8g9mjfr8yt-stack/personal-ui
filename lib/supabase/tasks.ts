@@ -55,18 +55,6 @@ type SyncableTask = {
   google_event_id?: string | null;
 };
 
-// O jeden deň neskôr než zadaný YYYY-MM-DD reťazec, počítané z lokálnych
-// (nie UTC) komponentov dátumu — rovnaký princíp ako oprava toISODate v
-// lib/dateUtils.ts, nech sa dátum pri hraničných časových pásmach neposunie.
-function nextDayISO(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(y, m - 1, d + 1);
-  const yy = dt.getFullYear();
-  const mm = String(dt.getMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
 // 2026-09-24 oprava — hlasový agent posiela scheduled_time ako "naivný"
 // ISO reťazec bez posunu (napr. "2026-09-24T15:00:00"), myslený ako
 // bratislavský miestny čas. Pri priamom uložení takéhoto reťazca do
@@ -88,7 +76,20 @@ function normalizeScheduledTime(
 
 async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) {
   try {
-    const hasDate = !!(task.due_date || task.scheduled_time);
+    // 2026-09-24 oprava — do Google Kalendára sa odteraz zrkadlí VÝLUČNE
+    // úloha s konkrétnym naplánovaným časom (scheduled_time). Úloha, ktorá
+    // má iba Od/Termín (deadline, alebo voľné plánovacie okno "spraviť
+    // niekedy medzi Od a Termín" bez konkrétneho času — pozri
+    // lib/taskCalendar.ts), NIE JE skutočná udalosť s pevným termínom, a
+    // preto sa do Kalendára nepushuje. Predtým sa aj takejto úlohe
+    // priradil google_event_id (ako celodenná udalosť), čo v zobrazení
+    // Dnes/Kalendár mylne vyvolalo nápis "celý deň" pri úlohe bez
+    // akéhokoľvek konkrétneho časového údaja (pozri taskMeta/
+    // isAllDayGoogleEvent) — "celý deň" má zostať vyhradené pre skutočné
+    // celodenné udalosti prevzaté priamo z Google Kalendára (opačný smer
+    // synchronizácie, lib/server/googleCalendarSync.ts a
+    // lib/gemini/calendarTools.ts).
+    const hasDate = !!task.scheduled_time;
 
     if (!hasDate) {
       if (task.google_event_id) {
@@ -98,25 +99,14 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
       return;
     }
 
-    let start: string;
-    let end: string;
-    if (task.scheduled_time) {
-      const startD = new Date(task.scheduled_time);
-      // Explicitný čas konca (ak ho používateľ zadal) má prednosť pred
-      // defaultnou 30-minútovou dĺžkou.
-      const endD = task.scheduled_time_end
-        ? new Date(task.scheduled_time_end)
-        : new Date(startD.getTime() + 30 * 60 * 1000);
-      start = startD.toISOString();
-      end = endD.toISOString();
-    } else {
-      // Bez presného času — celodenná udalosť (prípadne viacdňová, ak je
-      // vyplnené aj start_date). Google Calendar čaká `end` = deň PO
-      // poslednom dni okna.
-      const due = task.due_date as string;
-      start = task.start_date || due;
-      end = nextDayISO(due);
-    }
+    const startD = new Date(task.scheduled_time as string);
+    // Explicitný čas konca (ak ho používateľ zadal) má prednosť pred
+    // defaultnou 30-minútovou dĺžkou.
+    const endD = task.scheduled_time_end
+      ? new Date(task.scheduled_time_end)
+      : new Date(startD.getTime() + 30 * 60 * 1000);
+    const start = startD.toISOString();
+    const end = endD.toISOString();
 
     if (task.google_event_id) {
       await updateCalendarEvent({

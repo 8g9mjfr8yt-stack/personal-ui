@@ -612,6 +612,7 @@ export default function ProjectsPage() {
                             key={t.id}
                             bare
                             title={t.title}
+                            priority={t.priority}
                             done={t.status === "done"}
                             busy={busyId === t.id}
                             projectColor={p.accent_color}
