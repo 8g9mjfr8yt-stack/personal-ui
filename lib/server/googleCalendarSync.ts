@@ -152,6 +152,27 @@ function eventToTaskFields(event: any) {
   };
 }
 
+// 2026-09-24 — poistka po incidente: pri jednom webhook volaní Google
+// vrátil (napriek timeMin/timeMax na prvotnom syncu, pozri
+// runIncrementalSync nižšie) stovky udalostí siahajúcich od roku 2012 do
+// 2099, ktoré sa všetky zrkadlili ako nové úlohy. Presná príčina na
+// strane Google API sa nepodarilo s istotou zistiť (pageToken
+// pokračovanie možno nezachovalo pôvodné ohraničenie), preto je toto
+// druhá, nezávislá poistka priamo pri zápise: NOVÁ úloha sa z Calendar
+// udalosti založí iba vtedy, ak jej termín padne do rozumného plánovacieho
+// okna (rovnaké -30/+400 dní ako pri prvotnom syncu). Už predtým
+// sledované udalosti (existujúci `google_event_id`) sa naďalej aktualizujú
+// bez ohľadu na dátum — tu ide iba o to, aby jedno chybné/neočakávané
+// volanie znova nezaplavilo tabuľku tasks históriou kalendára.
+function isWithinMirrorWindow(dueDate: string | null): boolean {
+  if (!dueDate) return true;
+  const m = dueDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return true;
+  const t = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+  const now = Date.now();
+  return t >= now - 30 * 24 * 60 * 60 * 1000 && t <= now + 400 * 24 * 60 * 60 * 1000;
+}
+
 // Spracuje dávku zmenených udalostí z events.list a premietne ich do
 // `tasks`. Vracia počty pre logovanie/diagnostiku.
 //
@@ -186,9 +207,16 @@ async function applyEvents(admin: SupabaseClient, events: any[]) {
   }
   const existingByEventId = new Map((existingRows || []).map((r) => [r.google_event_id as string, r.id as string]));
 
-  const toInsert = active
+  const toInsertAll = active
     .filter((e) => !existingByEventId.has(e.id))
     .map((e) => ({ ...eventToTaskFields(e), google_event_id: e.id }));
+  const toInsert = toInsertAll.filter((fields) => isWithinMirrorWindow(fields.due_date));
+  const skippedOutOfWindow = toInsertAll.length - toInsert.length;
+  if (skippedOutOfWindow > 0) {
+    console.warn(
+      `calendar-sync: preskočených ${skippedOutOfWindow} nových udalostí mimo plánovacieho okna (-30/+400 dní) — pozri isWithinMirrorWindow.`
+    );
+  }
   const toUpdate = active.filter((e) => existingByEventId.has(e.id));
 
   let created = 0;
