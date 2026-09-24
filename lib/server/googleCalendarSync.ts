@@ -157,20 +157,24 @@ function eventToTaskFields(event: any) {
 // runIncrementalSync nižšie) stovky udalostí siahajúcich od roku 2012 do
 // 2099, ktoré sa všetky zrkadlili ako nové úlohy. Presná príčina na
 // strane Google API sa nepodarilo s istotou zistiť (pageToken
-// pokračovanie možno nezachovalo pôvodné ohraničenie), preto je toto
-// druhá, nezávislá poistka priamo pri zápise: NOVÁ úloha sa z Calendar
-// udalosti založí iba vtedy, ak jej termín padne do rozumného plánovacieho
-// okna (rovnaké -30/+400 dní ako pri prvotnom syncu). Už predtým
-// sledované udalosti (existujúci `google_event_id`) sa naďalej aktualizujú
-// bez ohľadu na dátum — tu ide iba o to, aby jedno chybné/neočakávané
-// volanie znova nezaplavilo tabuľku tasks históriou kalendára.
-function isWithinMirrorWindow(dueDate: string | null): boolean {
-  if (!dueDate) return true;
-  const m = dueDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return true;
-  const t = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
-  const now = Date.now();
-  return t >= now - 30 * 24 * 60 * 60 * 1000 && t <= now + 400 * 24 * 60 * 60 * 1000;
+// pokračovanie možno nezachovalo pôvodné ohraničenie).
+//
+// Filtrovanie podľa TERMÍNU udalosti (kedy je naplánovaná) sme zavrhli —
+// legitímna nová úloha môže mať termín ľubovoľne v budúcnosti aj tesne v
+// minulosti. Namiesto toho filtrujeme podľa toho, KEDY SAMOTNÁ UDALOSŤ V
+// GOOGLE KALENDÁRI VZNIKLA (`event.created`, Google to posiela vždy):
+// nová úloha sa založí iba z udalosti vytvorenej po tomto dátume — teda
+// ide o skutočne novú, reálne pridanú udalosť, nie o historický záznam,
+// ktorý sa (kvôli chybe/neočakávanému resyncu) odrazu objavil v odpovedi.
+// Už predtým sledované udalosti (existujúci `google_event_id`) sa
+// naďalej aktualizujú bez tohto obmedzenia.
+const MIRROR_CREATED_AFTER = new Date("2026-09-01T00:00:00Z").getTime();
+
+function isRecentlyCreatedEvent(event: any): boolean {
+  if (!event.created) return true;
+  const t = new Date(event.created).getTime();
+  if (Number.isNaN(t)) return true;
+  return t >= MIRROR_CREATED_AFTER;
 }
 
 // Spracuje dávku zmenených udalostí z events.list a premietne ich do
@@ -207,14 +211,14 @@ async function applyEvents(admin: SupabaseClient, events: any[]) {
   }
   const existingByEventId = new Map((existingRows || []).map((r) => [r.google_event_id as string, r.id as string]));
 
-  const toInsertAll = active
-    .filter((e) => !existingByEventId.has(e.id))
+  const newEvents = active.filter((e) => !existingByEventId.has(e.id));
+  const toInsert = newEvents
+    .filter((e) => isRecentlyCreatedEvent(e))
     .map((e) => ({ ...eventToTaskFields(e), google_event_id: e.id }));
-  const toInsert = toInsertAll.filter((fields) => isWithinMirrorWindow(fields.due_date));
-  const skippedOutOfWindow = toInsertAll.length - toInsert.length;
-  if (skippedOutOfWindow > 0) {
+  const skippedOld = newEvents.length - toInsert.length;
+  if (skippedOld > 0) {
     console.warn(
-      `calendar-sync: preskočených ${skippedOutOfWindow} nových udalostí mimo plánovacieho okna (-30/+400 dní) — pozri isWithinMirrorWindow.`
+      `calendar-sync: preskočených ${skippedOld} udalostí vytvorených pred ${new Date(MIRROR_CREATED_AFTER).toISOString()} — pozri isRecentlyCreatedEvent.`
     );
   }
   const toUpdate = active.filter((e) => existingByEventId.has(e.id));
