@@ -13,7 +13,8 @@ import {
   deleteTask,
 } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
-import { toISODate, startOfWeek, fromISODate, todayISO, addDaysISO } from "@/lib/dateUtils";
+import { toISODate, startOfWeek, fromISODate, todayISO } from "@/lib/dateUtils";
+import { taskDisplayDays } from "@/lib/taskCalendar";
 import { sortTasksForDisplay } from "@/lib/taskSort";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import TaskRow from "@/components/ui/TaskRow";
@@ -28,11 +29,13 @@ type Task = {
   project_id: string | null;
   due_date: string | null;
   start_date: string | null;
+  assigned_date: string | null;
   scheduled_time: string | null;
   scheduled_time_end: string | null;
   parent_task_id: string | null;
   context: string | null;
   estimated_minutes: number | null;
+  google_event_id: string | null;
 };
 
 type Project = { id: string; name: string; accent_color: string | null };
@@ -41,12 +44,54 @@ const DAY_LABELS = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
 const POOL_OPEN_KEY = "da_calendar_pool_open";
 const SELECTED_DAY_KEY = "da_calendar_selected_day";
 
-// Kompaktný meta text pre Kalendár — iba čas (priorita a počet
-// podúloh sa zobrazujú až po rozbalení, pozri TaskRow `compactMeta`).
-function taskMeta(t: Task) {
-  return t.scheduled_time
-    ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })
-    : null;
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatShortDate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d}.${m}.`;
+}
+
+function isAllDayGoogleEvent(t: Task) {
+  return !!t.google_event_id && !t.scheduled_time;
+}
+
+// Kompaktný meta text pre Kalendár — čas (priorita a počet podúloh sa
+// zobrazujú až po rozbalení, pozri TaskRow `compactMeta`). `day` je deň,
+// pre ktorý sa riadok práve vykresľuje — pri viacdňovej Google Calendar
+// udalosti (pozri taskDisplayDays v lib/taskCalendar.ts) sa totiž ten istý
+// task vykresľuje naraz vo viacerých dňoch a text sa musí líšiť podľa
+// toho, či ide o deň začiatku/konca/medziľahlý deň.
+//
+// 2026-09-24 — predtým sa zobrazoval iba začiatok (scheduled_time), teraz:
+// - celodenná Google Calendar udalosť (bez scheduled_time) → vždy "celý
+//   deň", na každom dni svojho rozsahu.
+// - viacdňová ČASOVANÁ udalosť: deň začiatku "od HH:MM - celý deň", deň
+//   konca "celý deň - do HH:MM", medziľahlé dni "celý deň".
+// - bežná úloha s konkrétnym časom na jednom dni → "HH:MM" (alebo
+//   "HH:MM–HH:MM", ak má aj scheduled_time_end).
+// - bez akéhokoľvek konkrétneho časového údaju → null (TaskRow riadok s
+//   časom vôbec nevykreslí).
+function taskMeta(t: Task, day: string): string | null {
+  if (isAllDayGoogleEvent(t)) return "celý deň";
+  if (!t.scheduled_time) return null;
+
+  const isMultiDay = !!(
+    t.google_event_id &&
+    t.start_date &&
+    t.due_date &&
+    t.start_date !== t.due_date
+  );
+  const startTime = formatTime(t.scheduled_time);
+  const endTime = t.scheduled_time_end ? formatTime(t.scheduled_time_end) : null;
+
+  if (!isMultiDay) {
+    return endTime ? `${startTime}–${endTime}` : startTime;
+  }
+  if (day === t.start_date) return `od ${startTime} - celý deň`;
+  if (day === t.due_date) return `celý deň - do ${endTime ?? startTime}`;
+  return "celý deň";
 }
 
 // Denný agent 2.0 — "Kalendár": týždenný pás dní + agenda vybraného dňa
@@ -183,17 +228,17 @@ export default function CalendarPage() {
         getUnassignedTasks(supabase) as Promise<Task[]>,
         getProjects(supabase) as Promise<Project[]>,
       ]);
-      // Viacdňová úloha (start_date odlišný od due_date — typicky
-      // zrkadlená viacdňová Google Calendar udalosť, pozri
-      // lib/server/googleCalendarSync.ts) sa vykreslí do KAŽDÉHO dňa
-      // svojho rozsahu, nie iba pod due_date — je to stále ten istý
-      // riadok v `tasks`, takže úprava z ktoréhokoľvek dňa mení tú istú
-      // úlohu (a teda tú istú Google Calendar udalosť) všade.
+      // Presné umiestnenie (na ktorý deň/dni sa úloha zobrazí) rieši
+      // zdieľaná taskDisplayDays() (lib/taskCalendar.ts) — viacdňová
+      // Google Calendar udalosť sa vykreslí do KAŽDÉHO dňa svojho
+      // rozsahu (je to stále ten istý riadok v `tasks`, takže úprava z
+      // ktoréhokoľvek dňa mení tú istú udalosť všade), zatiaľ čo bežná
+      // úloha s Od/Termín "plánovacím oknom" (bez konkrétneho času, bez
+      // priradenia) sa vôbec nezobrazí — tá patrí do poolu voľných úloh
+      // (getUnassignedTasks, lib/supabase/tasks.ts).
       const grouped: Record<string, Task[]> = {};
       for (const t of weekTasks) {
-        const due = t.due_date as string;
-        const start = t.start_date || due;
-        for (let day = start; day <= due; day = addDaysISO(day, 1)) {
+        for (const day of taskDisplayDays(t)) {
           if (!grouped[day]) grouped[day] = [];
           grouped[day].push(t);
         }
@@ -239,7 +284,22 @@ export default function CalendarPage() {
     setError(null);
     try {
       const supabase = createClient();
-      await updateTask(supabase, { id: taskId, due_date: null, scheduled_time: null });
+      const t = (tasksByDay[selectedDay] || []).find((x) => x.id === taskId);
+      if (t?.assigned_date) {
+        // Priradené z poolu cez assigned_date (úloha s Od/Termín
+        // "plánovacím oknom", pozri lib/taskCalendar.ts) — "Odobrať z
+        // dňa" iba zruší toto priradenie; pôvodné start_date/due_date
+        // ostávajú nedotknuté, takže sa úloha vráti do poolu so svojím
+        // pôvodným rozpätím zachovaným.
+        await updateTask(supabase, { id: taskId, assigned_date: null });
+      } else {
+        await updateTask(supabase, {
+          id: taskId,
+          due_date: null,
+          scheduled_time: null,
+          scheduled_time_end: null,
+        });
+      }
       await load();
     } catch (err) {
       const e = err as Error;
@@ -254,7 +314,23 @@ export default function CalendarPage() {
     setError(null);
     try {
       const supabase = createClient();
-      await updateTask(supabase, { id: taskId, due_date: selectedDay });
+      const t = pool?.find((p) => p.id === taskId);
+      // Úloha s Od/Termín "plánovacím oknom" (bez konkrétneho času, bez
+      // Google prepojenia) sa priraďuje cez samostatný `assigned_date` —
+      // pôvodné start_date/due_date ostávajú nedotknuté, takže "Odobrať
+      // z dňa" ich vie neskôr obnoviť (pozri lib/taskCalendar.ts).
+      const isWindowTask =
+        !!t &&
+        !t.google_event_id &&
+        !t.scheduled_time &&
+        !!t.start_date &&
+        !!t.due_date &&
+        t.start_date !== t.due_date;
+      if (isWindowTask) {
+        await updateTask(supabase, { id: taskId, assigned_date: selectedDay });
+      } else {
+        await updateTask(supabase, { id: taskId, due_date: selectedDay });
+      }
       await load();
     } catch (err) {
       const e = err as Error;
@@ -479,7 +555,7 @@ export default function CalendarPage() {
             <TaskRow
               key={t.id}
               title={t.title}
-              meta={taskMeta(t)}
+              meta={taskMeta(t, selectedDay)}
               priority={t.priority}
               compactMeta
               done={t.status === "done"}
@@ -528,6 +604,13 @@ export default function CalendarPage() {
                   <span className="min-w-0 flex-grow">
                     <span className="block text-sm font-medium text-da-text">{t.title}</span>
                     {t.context && <span className="block text-xs text-da-meta">{t.context}</span>}
+                    {t.due_date && (
+                      <span className="block text-xs text-da-meta">
+                        {t.start_date && t.start_date !== t.due_date
+                          ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
+                          : `Termín ${formatShortDate(t.due_date)}`}
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"

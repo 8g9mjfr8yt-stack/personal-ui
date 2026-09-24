@@ -28,21 +28,48 @@ type Task = {
   project_id: string | null;
   due_date: string | null;
   start_date: string | null;
+  assigned_date: string | null;
   scheduled_time: string | null;
   scheduled_time_end: string | null;
   parent_task_id: string | null;
   context: string | null;
   estimated_minutes: number | null;
+  google_event_id: string | null;
 };
 
 type Project = { id: string; name: string; accent_color: string | null };
 
-// Kompaktný meta text pre Dnes — iba čas (priorita a počet podúloh sa
-// zobrazujú až po rozbalení, pozri TaskRow `compactMeta`).
-function taskMeta(t: Task) {
-  return t.scheduled_time
-    ? new Date(t.scheduled_time).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })
-    : null;
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" });
+}
+
+function isAllDayGoogleEvent(t: Task) {
+  return !!t.google_event_id && !t.scheduled_time;
+}
+
+// Kompaktný meta text pre Dnes — čas (priorita a počet podúloh sa
+// zobrazujú až po rozbalení, pozri TaskRow `compactMeta`). `day` je vždy
+// dnešný dátum (Dnes zobrazuje iba jeden deň) — rovnaká logika ako
+// taskMeta v app/(app)/calendar/page.tsx, pozri tam podrobný komentár.
+function taskMeta(t: Task, day: string): string | null {
+  if (isAllDayGoogleEvent(t)) return "celý deň";
+  if (!t.scheduled_time) return null;
+
+  const isMultiDay = !!(
+    t.google_event_id &&
+    t.start_date &&
+    t.due_date &&
+    t.start_date !== t.due_date
+  );
+  const startTime = formatTime(t.scheduled_time);
+  const endTime = t.scheduled_time_end ? formatTime(t.scheduled_time_end) : null;
+
+  if (!isMultiDay) {
+    return endTime ? `${startTime}–${endTime}` : startTime;
+  }
+  if (day === t.start_date) return `od ${startTime} - celý deň`;
+  if (day === t.due_date) return `celý deň - do ${endTime ?? startTime}`;
+  return "celý deň";
 }
 
 // Denný agent 2.0 — "Dnes": tasks s due_date = dnes (oprava
@@ -301,7 +328,7 @@ export default function TodayPage() {
               <TaskRow
                 key={t.id}
                 title={t.title}
-                meta={taskMeta(t)}
+                meta={taskMeta(t, todayISO())}
                 priority={t.priority}
                 compactMeta
                 done={t.status === "done"}

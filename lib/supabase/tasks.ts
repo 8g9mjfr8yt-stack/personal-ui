@@ -5,6 +5,7 @@ import {
   deleteCalendarEvent,
 } from "@/lib/googleCalendar";
 import { localDateTimeToISOString } from "@/lib/dateUtils";
+import { taskDisplayDays } from "@/lib/taskCalendar";
 
 // Dátová vrstva pre tabuľku `tasks` — priame Supabase volania (RLS cez
 // prihláseného `authenticated` používateľa). Logika zámerne kopíruje 5 n8n
@@ -171,30 +172,43 @@ export async function getTasksInRange(
   startISO: string,
   endISO: string
 ) {
+  // 2026-09-24 — presné umiestnenie (na ktorý deň/dni sa úloha naozaj
+  // zobrazí) teraz rieši zdieľaná taskDisplayDays() (lib/taskCalendar.ts) —
+  // zohľadňuje aj `assigned_date` (priradenie z poolu) a vylučuje úlohy s
+  // Od/Termín "plánovacím oknom" bez konkrétneho času/priradenia (tie
+  // patria do poolu, pozri getUnassignedTasks nižšie). Dotaz preto načíta
+  // širší, ale bezpečný kandidátsky výber (čokoľvek s due_date alebo
+  // assigned_date) a presné zaradenie do okna [startISO, endISO) urobí až
+  // JS filter podľa taskDisplayDays.
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
     .is("parent_task_id", null)
-    .gte("due_date", startISO)
-    .or(`and(start_date.not.is.null,start_date.lt.${endISO}),and(start_date.is.null,due_date.lt.${endISO})`)
-    .order("scheduled_time", { ascending: true, nullsFirst: false });
+    .or("due_date.not.is.null,assigned_date.not.is.null")
+    .order("scheduled_time", { ascending: true, nullsFirst: false })
+    .limit(500);
   if (error) throw error;
-  return data;
+  return (data || []).filter((t) => taskDisplayDays(t).some((d) => d >= startISO && d < endISO));
 }
 
 // "Pool" voľných úloh na priradenie (Kalendár 2.0) — top-level, bez dňa,
 // ešte nedokončené.
 export async function getUnassignedTasks(supabase: SupabaseClient) {
+  // 2026-09-24 — pool teraz obsahuje aj úlohy s Od/Termín "plánovacím
+  // oknom" (start_date odlišné od due_date), ktoré nemajú konkrétny čas
+  // ani nie sú priradené na konkrétny deň (assigned_date) — nielen úlohy
+  // úplne bez due_date, ako predtým. Presnú definíciu "je/nie je
+  // umiestnená v Kalendári" rieši zdieľaná taskDisplayDays()
+  // (lib/taskCalendar.ts), preto sa filtruje až v JS.
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
-    .is("due_date", null)
     .is("parent_task_id", null)
     .is("completed_at", null)
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(300);
   if (error) throw error;
-  return data;
+  return (data || []).filter((t) => taskDisplayDays(t).length === 0);
 }
 
 // Všetky top-level úlohy patriace k jednému projektu (Projekty 2.0
@@ -241,6 +255,7 @@ export async function createTask(
     scheduled_time?: string | null;
     scheduled_time_end?: string | null;
     start_date?: string | null;
+    assigned_date?: string | null;
     depends_on_task_id?: string | null;
     context?: string | null;
     estimated_minutes?: number | null;
@@ -260,6 +275,7 @@ export async function createTask(
       scheduled_time: normalizeScheduledTime(input.scheduled_time) || null,
       scheduled_time_end: normalizeScheduledTime(input.scheduled_time_end) || null,
       start_date: input.start_date || null,
+      assigned_date: input.assigned_date || null,
       depends_on_task_id: input.depends_on_task_id || null,
       context: input.context || null,
       estimated_minutes: input.estimated_minutes ?? null,
@@ -284,6 +300,7 @@ export async function updateTask(
     scheduled_time: string | null;
     scheduled_time_end: string | null;
     start_date: string | null;
+    assigned_date: string | null;
     depends_on_task_id: string | null;
     context: string | null;
     estimated_minutes: number | null;

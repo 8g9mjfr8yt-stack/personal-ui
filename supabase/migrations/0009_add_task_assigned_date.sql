@@ -1,0 +1,18 @@
+-- 2026-09-24 — "voľné úlohy na priradenie" pre úlohy s rozpätím (Od +
+-- Termín, žiadny konkrétny čas, nenaviazané na Google Calendar): predtým
+-- sa takáto úloha vždy zobrazovala pod svojím `due_date` (a po oprave
+-- viacdňových Calendar udalostí dokonca naprieč CELÝM rozpätím Od→Termín),
+-- hoci `start_date`/`due_date` tu slúžia iba ako plánovacie okno ("spraviť
+-- niekedy medzi Od a Termín"), nie ako konkrétne umiestnenie v Kalendári.
+--
+-- `assigned_date` je nový, úplne samostatný stĺpec: deň, na ktorý bola
+-- takáto úloha explicitne "priradená" z poolu voľných úloh v Kalendári
+-- (tlačidlo "Priradiť na deň" / "Odobrať z dňa"). Na rozdiel od `due_date`
+-- sa ním NIKDY neprepisuje pôvodné Od/Termín okno — vďaka tomu si úloha po
+-- "Odobrať z dňa" zachová svoje pôvodné Od/Termín a vráti sa do poolu.
+--
+-- Bežné úlohy (bez Od/Termín rozpätia, iba `due_date`) tento stĺpec vôbec
+-- nepoužívajú — ich umiestnenie v Kalendári naďalej rieši `due_date` presne
+-- ako doteraz. Pozri lib/taskCalendar.ts (taskDisplayDays) pre presnú
+-- logiku, ktorá polia pri zobrazovaní/priraďovaní zohľadňuje.
+alter table tasks add column if not exists assigned_date date;
