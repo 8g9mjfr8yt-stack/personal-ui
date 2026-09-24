@@ -60,6 +60,13 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/push/send|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // 2026-09-24 — /api/calendar-webhook (Google Calendar Push
+    // Notifications) a /api/cron/* (Vercel Cron) volá server-to-server,
+    // bez prihlásenej session — bez tejto výnimky ich toto middleware
+    // presmerovávalo na /login (307), presne ako predtým /api/push/send
+    // (pozri git históriu "vynat /api/push/send z auth middleware").
+    // Oba majú VLASTNÚ autentifikáciu (CRON_SECRET / GOOGLE_CALENDAR_WEBHOOK_TOKEN
+    // v hlavičke), takže to nie je diera v zabezpečení.
+    "/((?!api/push/send|api/calendar-webhook|api/cron|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
