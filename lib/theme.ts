@@ -14,7 +14,7 @@ export const THEME_COLORS: Record<Theme, string> = {
   night: "#131313",
 };
 
-export const APP_VERSION = "2.1";
+export const APP_VERSION = "2.12";
 
 export function readTheme(): Theme {
   try {

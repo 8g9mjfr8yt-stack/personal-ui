@@ -17,7 +17,7 @@ import { toISODate, startOfWeek, fromISODate, todayISO } from "@/lib/dateUtils";
 import { taskDisplayDays } from "@/lib/taskCalendar";
 import { sortTasksForDisplay, sortPoolTasks, priorityDisplay } from "@/lib/taskSort";
 import { softBg, softText } from "@/lib/colorUtils";
-import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
+import { useScrollRestore } from "@/lib/usePersistedState";
 import TaskRow from "@/components/ui/TaskRow";
 import DoneDock from "@/components/ui/DoneDock";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
@@ -43,7 +43,6 @@ type Task = {
 type Project = { id: string; name: string; accent_color: string | null };
 
 const DAY_LABELS = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
-const POOL_OPEN_KEY = "da_calendar_pool_open";
 const SELECTED_DAY_KEY = "da_calendar_selected_day";
 
 function formatTime(iso: string) {
@@ -111,9 +110,11 @@ function taskMeta(t: Task, day: string): string | null {
 //   podúlohy, menu "⋮" upraví, a "Odobrať z dňa" v tom istom menu
 //   slúži na explicitné odobratie z dňa.
 //
-// 2026-09-25 — po reálnom testovaní: rozbalené úlohy a scroll pozícia
-// sa teraz ukladajú, takže po prepnutí na inú záložku a späť zostane
-// obrazovka presne taká, akú používateľ opustil.
+// 2026-09-25 — po reálnom testovaní: scroll pozícia sa ukladá, takže
+// po prepnutí na inú záložku a späť zostane obrazovka na rovnakom mieste.
+//
+// Denný agent 2.12 — po prepnutí na inú záložku a späť sú voľné úlohy
+// (pool) vždy schované a rozbalené úlohy zbalené (stav sa už neukladá).
 export default function CalendarPage() {
   // weekAnchorISO určuje, ktorý týždeň je zobrazený — predtým bol
   // natvrdo "tento týždeň" (zmrazené pri mount), takže sa nedalo
@@ -137,14 +138,12 @@ export default function CalendarPage() {
   const [selectedDay, setSelectedDayState] = useState(() => toISODate(new Date()));
   const [tasksByDay, setTasksByDay] = useState<Record<string, Task[]>>({});
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
-  const [expandedTasks, setExpandedTasks] = usePersistedFlags("da_calendar_expanded_tasks");
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [pool, setPool] = useState<Task[] | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
-  // Rozbalenie voľnej úlohy v poole (šípka) a jej "⋮" menu s
-  // upraviť/vymazať — dve nezávislé, na id kľúčované mapy, pozri
-  // vykreslenie poolu nižšie.
+  // Rozbalenie voľnej úlohy v poole (šípka) — po rozbalení sú hneď
+  // viditeľné tlačidlá Upraviť / Vymazať (bez "⋮" menu, 2.12).
   const [poolRowOpen, setPoolRowOpen] = useState<Record<string, boolean>>({});
-  const [poolMenuOpen, setPoolMenuOpen] = useState<Record<string, boolean>>({});
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -156,12 +155,6 @@ export default function CalendarPage() {
   useScrollRestore("da_scroll_calendar", pool !== null);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(POOL_OPEN_KEY);
-      if (stored !== null) setPoolOpen(stored === "1");
-    } catch {
-      /* localStorage nedostupné — ostane defaultne zbalené */
-    }
     try {
       const storedDay = window.localStorage.getItem(SELECTED_DAY_KEY);
       // Obnovíme uložený deň iba ak patrí do aktuálne zobrazeného
@@ -212,15 +205,7 @@ export default function CalendarPage() {
   }
 
   function togglePool() {
-    setPoolOpen((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(POOL_OPEN_KEY, next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    setPoolOpen((prev) => !prev);
   }
 
   async function load() {
@@ -618,7 +603,7 @@ export default function CalendarPage() {
               {(pool ? sortPoolTasks(pool) : []).map((t) => {
                 const project = projectFor(t.project_id);
                 const rowOpen = !!poolRowOpen[t.id];
-                const menuOpen = !!poolMenuOpen[t.id];
+                const priority = priorityDisplay(t.priority);
                 return (
                   <div
                     key={t.id}
@@ -628,14 +613,6 @@ export default function CalendarPage() {
                       <span className="min-w-0 flex-grow truncate text-sm font-medium text-da-text">
                         {t.title}
                       </span>
-                      {project && (
-                        <span
-                          className="shrink-0 rounded-full px-2 py-0.5 text-[11px]"
-                          style={{ background: softBg(project.accent_color), color: softText(project.accent_color) }}
-                        >
-                          {project.name}
-                        </span>
-                      )}
                       <button
                         onClick={() => handleAssign(t.id)}
                         disabled={busyId === t.id}
@@ -649,14 +626,8 @@ export default function CalendarPage() {
                       </button>
                       <button
                         type="button"
-                        aria-label={rowOpen ? "Skryť možnosti" : "Ďalšie možnosti"}
-                        onClick={() =>
-                          setPoolRowOpen((prev) => {
-                            const next = { ...prev, [t.id]: !prev[t.id] };
-                            if (!next[t.id]) setPoolMenuOpen((m) => ({ ...m, [t.id]: false }));
-                            return next;
-                          })
-                        }
+                        aria-label={rowOpen ? "Skryť podrobnosti" : "Zobraziť podrobnosti"}
+                        onClick={() => setPoolRowOpen((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
                         className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
                       >
                         <svg
@@ -677,58 +648,42 @@ export default function CalendarPage() {
 
                     {rowOpen && (
                       <div className="flex flex-col gap-2 border-t border-da-border/60 pt-2">
-                        {(priorityDisplay(t.priority) || t.context || t.due_date) && (
-                          <div className="flex flex-col gap-1">
-                            {priorityDisplay(t.priority) && (
-                              <span className="text-xs text-da-meta">{priorityDisplay(t.priority)}</span>
-                            )}
-                            {t.context && <span className="text-xs text-da-meta">{t.context}</span>}
-                            {t.due_date && (
-                              <span className="text-xs text-da-meta">
-                                {t.start_date && t.start_date !== t.due_date
-                                  ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
-                                  : `Termín ${formatShortDate(t.due_date)}`}
+                        {(priority || project) && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {priority && <span className="text-xs text-da-meta">{priority}</span>}
+                            {project && (
+                              <span
+                                className="rounded-full px-2 py-0.5 text-[11px]"
+                                style={{ background: softBg(project.accent_color), color: softText(project.accent_color) }}
+                              >
+                                {project.name}
                               </span>
                             )}
                           </div>
                         )}
-                        <div className="flex items-center justify-end gap-2">
-                        {menuOpen && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPoolMenuOpen((prev) => ({ ...prev, [t.id]: false }));
-                                openEdit(t);
-                              }}
-                              className="rounded-full px-2.5 py-1 text-xs font-medium text-da-text hover:bg-da-bg"
-                            >
-                              Upraviť
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPoolMenuOpen((prev) => ({ ...prev, [t.id]: false }));
-                                handleDelete(t);
-                              }}
-                              className="rounded-full px-2.5 py-1 text-xs font-medium text-da-danger hover:bg-da-bg"
-                            >
-                              Vymazať
-                            </button>
-                          </>
+                        {t.context && <span className="text-xs text-da-meta">{t.context}</span>}
+                        {t.due_date && (
+                          <span className="text-xs text-da-meta">
+                            {t.start_date && t.start_date !== t.due_date
+                              ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
+                              : `Termín ${formatShortDate(t.due_date)}`}
+                          </span>
                         )}
-                        <button
-                          type="button"
-                          aria-label="Ďalšie možnosti"
-                          onClick={() => setPoolMenuOpen((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
-                        >
-                          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                            <circle cx="12" cy="5" r="1.7" />
-                            <circle cx="12" cy="12" r="1.7" />
-                            <circle cx="12" cy="19" r="1.7" />
-                          </svg>
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(t)}
+                            className="rounded-full px-2.5 py-1 text-xs font-medium text-da-text hover:bg-da-bg"
+                          >
+                            Upraviť
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(t)}
+                            className="rounded-full px-2.5 py-1 text-xs font-medium text-da-danger hover:bg-da-bg"
+                          >
+                            Vymazať
+                          </button>
                         </div>
                       </div>
                     )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toLocalDateTimeInputValue } from "@/lib/dateUtils";
 
 export type TaskEditModalProject = { id: string; name: string };
@@ -96,15 +96,31 @@ export default function TaskEditModal({
     });
   }
 
+  // Denný agent 2.12 — kým je okno otvorené, stránka pod ním sa
+  // neposúva (inak iOS posúval pozadie namiesto formulára).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  // 2.12 — oprava na telefóne: celé prekrytie je teraz scrollovateľné
+  // (namiesto max-h vo vh jednotkách, ktoré na iOS nerátajú s lištou
+  // Safari ani klávesnicou), je nad spodnou lištou (z-[60]) a formulár
+  // má spodný odstup aj pre "home indikátor" — tlačidlo Uložiť sa dá
+  // vždy doscrollovať.
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center"
+      className="fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-black/30"
       onClick={onClose}
     >
+      <div className="flex min-h-full items-end justify-center sm:items-center sm:p-4">
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="flex max-h-[88vh] w-full max-w-md flex-col gap-3 overflow-y-auto rounded-t-[28px] bg-da-bg p-5 sm:rounded-da-card"
+        className="flex w-full max-w-md flex-col gap-3 rounded-t-[28px] bg-da-bg p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))] sm:rounded-da-card"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-da-text">{isEdit ? "Upraviť úlohu" : "Nová úloha"}</h2>
@@ -247,6 +263,7 @@ export default function TaskEditModal({
           {saving ? "Ukladám…" : isEdit ? "Uložiť zmeny" : "Vytvoriť úlohu"}
         </button>
       </form>
+      </div>
     </div>
   );
 }
