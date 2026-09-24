@@ -449,35 +449,11 @@ export default function ProjectsPage() {
     <div className="px-5 pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="text-[21px] font-bold">Projekty</h1>
-        <button
-          type="button"
-          aria-label="Nový projekt"
-          onClick={() => {
-            setShowCreateForm((v) => !v);
-            setEditingProjectId(null);
-          }}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
       </div>
       {projects !== null && (
         <p className="mb-4 text-sm text-da-meta">
           {activeCount} aktívne{plannedCount > 0 ? ` · ${plannedCount} plánovaných` : ""}
         </p>
-      )}
-
-      {showCreateForm && (
-        <ProjectForm
-          initial={{ name: "", description: "", priority: "", deadline: "", accent_color: null }}
-          onSubmit={handleCreateProject}
-          onCancel={() => setShowCreateForm(false)}
-          saving={creating}
-          submitLabel="Pridať projekt"
-        />
       )}
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
@@ -638,22 +614,26 @@ export default function ProjectsPage() {
                     </div>
                   ))}
 
-                  <div className="flex flex-col gap-2 border-t border-da-border/70 pt-3">
+                  <div className="flex items-center gap-2 border-t border-da-border/70 pt-3">
                     <button
                       type="button"
+                      aria-label="Nová úloha v projekte"
                       onClick={() => openCreateTaskFor(p.id)}
-                      className="self-start text-sm font-medium"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center"
                       style={{ color: accent }}
                     >
-                      + Nová úloha v projekte
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
                     </button>
 
                     {assigningProjectId === p.id ? (
-                      <div className="flex gap-2">
+                      <div className="flex min-w-0 flex-grow justify-end gap-2">
                         <select
                           value={assignPicks[p.id] || ""}
                           onChange={(e) => setAssignPicks((prev) => ({ ...prev, [p.id]: e.target.value }))}
-                          className="min-w-0 flex-grow rounded-lg border border-da-border px-2 py-1.5 text-sm"
+                          className="min-w-0 max-w-[65%] rounded-lg border border-da-border px-2 py-1.5 text-sm"
                         >
                           <option value="">— vyber existujúcu úlohu —</option>
                           {unassignedTasks.map((t) => (
@@ -675,7 +655,7 @@ export default function ProjectsPage() {
                       <button
                         type="button"
                         onClick={() => setAssigningProjectId(p.id)}
-                        className="self-start text-sm font-medium text-da-meta"
+                        className="ml-auto text-sm font-medium text-da-meta"
                       >
                         Priradiť existujúcu úlohu…
                       </button>
@@ -686,6 +666,33 @@ export default function ProjectsPage() {
             </div>
           );
         })}
+      </div>
+
+      {showCreateForm && (
+        <ProjectForm
+          initial={{ name: "", description: "", priority: "", deadline: "", accent_color: null }}
+          onSubmit={handleCreateProject}
+          onCancel={() => setShowCreateForm(false)}
+          saving={creating}
+          submitLabel="Pridať projekt"
+        />
+      )}
+
+      <div className="flex justify-end pb-6">
+        <button
+          type="button"
+          aria-label="Nový projekt"
+          onClick={() => {
+            setShowCreateForm((v) => !v);
+            setEditingProjectId(null);
+          }}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {modalInitial && (

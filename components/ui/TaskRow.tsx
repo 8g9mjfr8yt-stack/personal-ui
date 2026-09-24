@@ -305,11 +305,15 @@ export default function TaskRow({
           {onAddSubtask && (
             <button
               type="button"
+              aria-label="Pridať podúlohu"
               onClick={onAddSubtask}
-              className="mt-1 self-start text-sm font-medium"
+              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center self-end"
               style={{ color: accent }}
             >
-              + Pridať podúlohu
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
             </button>
           )}
         </div>

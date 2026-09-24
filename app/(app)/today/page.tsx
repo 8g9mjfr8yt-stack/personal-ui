@@ -293,17 +293,6 @@ export default function TodayPage() {
     <div className="px-5 pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="text-[21px] font-bold">Dnes</h1>
-        <button
-          type="button"
-          aria-label="Nová úloha"
-          onClick={openCreate}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
       </div>
       <p className="mb-4 text-sm text-da-meta">
         {new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "long" })}
@@ -354,6 +343,20 @@ export default function TodayPage() {
           })}
         </div>
       )}
+
+      <div className="flex justify-end pb-4">
+        <button
+          type="button"
+          aria-label="Nová úloha"
+          onClick={openCreate}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
 
       {modalInitial && (
         <TaskEditModal

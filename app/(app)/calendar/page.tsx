@@ -470,22 +470,24 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col">
-      <div className="flex items-center justify-between px-5 pb-3 pt-6">
+      <div className="px-5 pb-3 pt-6">
         <h1 className="text-[21px] font-bold">Kalendár</h1>
-        <button
-          type="button"
-          aria-label="Nová úloha na vybraný deň"
-          onClick={openCreate}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </button>
       </div>
 
-      <div className="flex items-center justify-between px-4 pb-2">
+      <div className="flex items-center justify-center gap-2 px-4 pb-2">
+        <button type="button" onClick={goToday} className="text-xs font-medium text-da-meta">
+          {weekLabel}
+        </button>
+        <input
+          type="date"
+          aria-label="Skočiť na dátum"
+          value={selectedDay}
+          onChange={(e) => jumpToDate(e.target.value)}
+          className="rounded-lg border border-da-border bg-da-card px-1.5 py-0.5 text-xs text-da-meta"
+        />
+      </div>
+
+      <div className="flex items-center gap-1 px-2 pb-4">
         <button
           type="button"
           aria-label="Predchádzajúci týždeň"
@@ -496,17 +498,32 @@ export default function CalendarPage() {
             <polyline points="15 18 9 12 15 6" />
           </svg>
         </button>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={goToday} className="text-xs font-medium text-da-meta">
-            {weekLabel}
-          </button>
-          <input
-            type="date"
-            aria-label="Skočiť na dátum"
-            value={selectedDay}
-            onChange={(e) => jumpToDate(e.target.value)}
-            className="rounded-lg border border-da-border bg-da-card px-1.5 py-0.5 text-xs text-da-meta"
-          />
+        <div className="flex flex-1 justify-between gap-1">
+          {weekDays.map((d, i) => {
+            const iso = toISODate(d);
+            const isSelected = iso === selectedDay;
+            const hasTasks = (tasksByDay[iso] || []).length > 0;
+            return (
+              <button
+                key={iso}
+                onClick={() => setSelectedDay(iso)}
+                className="flex flex-1 flex-col items-center gap-1 rounded-2xl py-2.5"
+                style={{ background: isSelected ? "#5B7F66" : "transparent" }}
+              >
+                <span className="text-[11px]" style={{ color: isSelected ? "#EAF1EA" : "#9A9384" }}>
+                  {DAY_LABELS[i]}
+                </span>
+                <span
+                  className="text-sm font-semibold"
+                  style={{ color: isSelected ? "#FFFFFF" : "#211E1B" }}
+                >
+                  {d.getDate()}
+                </span>
+                {hasTasks && !isSelected && <span className="h-1 w-1 rounded-full bg-da-accent" />}
+                {(!hasTasks || isSelected) && <span className="h-1 w-1" />}
+              </button>
+            );
+          })}
         </div>
         <button
           type="button"
@@ -518,34 +535,6 @@ export default function CalendarPage() {
             <polyline points="9 18 15 12 9 6" />
           </svg>
         </button>
-      </div>
-
-      <div className="flex justify-between gap-1 px-4 pb-4">
-        {weekDays.map((d, i) => {
-          const iso = toISODate(d);
-          const isSelected = iso === selectedDay;
-          const hasTasks = (tasksByDay[iso] || []).length > 0;
-          return (
-            <button
-              key={iso}
-              onClick={() => setSelectedDay(iso)}
-              className="flex flex-1 flex-col items-center gap-1 rounded-2xl py-2.5"
-              style={{ background: isSelected ? "#5B7F66" : "transparent" }}
-            >
-              <span className="text-[11px]" style={{ color: isSelected ? "#EAF1EA" : "#9A9384" }}>
-                {DAY_LABELS[i]}
-              </span>
-              <span
-                className="text-sm font-semibold"
-                style={{ color: isSelected ? "#FFFFFF" : "#211E1B" }}
-              >
-                {d.getDate()}
-              </span>
-              {hasTasks && !isSelected && <span className="h-1 w-1 rounded-full bg-da-accent" />}
-              {(!hasTasks || isSelected) && <span className="h-1 w-1" />}
-            </button>
-          );
-        })}
       </div>
 
       {error && <p className="px-5 pb-3 text-sm text-red-600">{error}</p>}
@@ -588,6 +577,20 @@ export default function CalendarPage() {
         })}
       </div>
 
+      <div className="flex justify-end px-5 pb-4">
+        <button
+          type="button"
+          aria-label="Nová úloha na vybraný deň"
+          onClick={openCreate}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      </div>
+
       <div className="h-2" />
 
       {/* Spodný "pool" panel sa vykresľuje priamo nad BottomChrome cez
@@ -611,31 +614,18 @@ export default function CalendarPage() {
                     key={t.id}
                     className="flex flex-col gap-2 rounded-2xl border border-dashed border-da-border px-3.5 py-2.5"
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="min-w-0 flex-grow">
-                        <span className="block text-sm font-medium text-da-text">{t.title}</span>
-                        <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          {priorityDisplay(t.priority) && (
-                            <span className="text-xs text-da-meta">{priorityDisplay(t.priority)}</span>
-                          )}
-                          {project && (
-                            <span
-                              className="inline-block rounded-full px-2 py-0.5 text-[11px]"
-                              style={{ background: softBg(project.accent_color), color: softText(project.accent_color) }}
-                            >
-                              {project.name}
-                            </span>
-                          )}
-                        </span>
-                        {t.context && <span className="block text-xs text-da-meta">{t.context}</span>}
-                        {t.due_date && (
-                          <span className="block text-xs text-da-meta">
-                            {t.start_date && t.start_date !== t.due_date
-                              ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
-                              : `Termín ${formatShortDate(t.due_date)}`}
-                          </span>
-                        )}
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-grow truncate text-sm font-medium text-da-text">
+                        {t.title}
                       </span>
+                      {project && (
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-[11px]"
+                          style={{ background: softBg(project.accent_color), color: softText(project.accent_color) }}
+                        >
+                          {project.name}
+                        </span>
+                      )}
                       <button
                         onClick={() => handleAssign(t.id)}
                         disabled={busyId === t.id}
@@ -676,7 +666,23 @@ export default function CalendarPage() {
                     </div>
 
                     {rowOpen && (
-                      <div className="flex items-center justify-end gap-2 border-t border-da-border/60 pt-2">
+                      <div className="flex flex-col gap-2 border-t border-da-border/60 pt-2">
+                        {(priorityDisplay(t.priority) || t.context || t.due_date) && (
+                          <div className="flex flex-col gap-1">
+                            {priorityDisplay(t.priority) && (
+                              <span className="text-xs text-da-meta">{priorityDisplay(t.priority)}</span>
+                            )}
+                            {t.context && <span className="text-xs text-da-meta">{t.context}</span>}
+                            {t.due_date && (
+                              <span className="text-xs text-da-meta">
+                                {t.start_date && t.start_date !== t.due_date
+                                  ? `Od ${formatShortDate(t.start_date)} do ${formatShortDate(t.due_date)}`
+                                  : `Termín ${formatShortDate(t.due_date)}`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        <div className="flex items-center justify-end gap-2">
                         {menuOpen && (
                           <>
                             <button
@@ -713,6 +719,7 @@ export default function CalendarPage() {
                             <circle cx="12" cy="19" r="1.7" />
                           </svg>
                         </button>
+                        </div>
                       </div>
                     )}
                   </div>
