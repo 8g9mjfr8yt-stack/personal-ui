@@ -159,6 +159,13 @@ export async function getTasks(supabase: SupabaseClient) {
 // Úlohy s termínom presne v zadanom dátumovom rozsahu [startISO, endISO)
 // — top-level, bez ohľadu na to, či sú hotové (2.0 Dnes/Kalendár: hotové
 // úlohy ostávajú viditeľné, len vizuálne odlíšené, nikdy nemiznú).
+// 2026-09-24 oprava — viacdňové úlohy (start_date < due_date, napr.
+// zrkadlená viacdňová Google Calendar udalosť) predtým vypadli z okna
+// úplne, ak ich due_date (POSLEDNÝ deň) padol mimo dotazovaný rozsah,
+// hoci ich start_date (a teda časť rozsahu) doň spadal — filtrovalo sa
+// iba podľa due_date. Teraz ide o skutočný prienik intervalov: úloha sa
+// vráti, ak jej [start_date ?? due_date, due_date] prekrýva
+// [startISO, endISO).
 export async function getTasksInRange(
   supabase: SupabaseClient,
   startISO: string,
@@ -167,9 +174,9 @@ export async function getTasksInRange(
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
-    .gte("due_date", startISO)
-    .lt("due_date", endISO)
     .is("parent_task_id", null)
+    .gte("due_date", startISO)
+    .or(`and(start_date.not.is.null,start_date.lt.${endISO}),and(start_date.is.null,due_date.lt.${endISO})`)
     .order("scheduled_time", { ascending: true, nullsFirst: false });
   if (error) throw error;
   return data;

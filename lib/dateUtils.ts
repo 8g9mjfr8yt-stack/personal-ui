@@ -81,3 +81,19 @@ export function toLocalDateTimeInputValue(value: string): string {
   const mi = String(d.getMinutes()).padStart(2, "0");
   return `${y}-${mo}-${day}T${h}:${mi}`;
 }
+
+// 2026-09-24 — pridá (alebo odčíta, pri zápornom `days`) daný počet dní k
+// "YYYY-MM-DD" reťazcu, počítané z LOKÁLNYCH komponentov (rovnaký princíp
+// ako fromISODate/toISODate vyššie — žiadna konverzia cez UTC, ktorá by pri
+// hraničných časových pásmach posunula deň). Používa sa najmä pri
+// zrkadlení viacdňových Google Calendar udalostí do úloh: Google pri
+// celodenných udalostiach vracia `end.date` EXKLUZÍVNE (deň PO poslednom
+// dni), takže skutočný posledný deň je `addDaysISO(event.end.date, -1)`.
+export function addDaysISO(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}

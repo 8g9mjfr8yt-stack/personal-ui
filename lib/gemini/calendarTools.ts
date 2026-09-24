@@ -6,7 +6,7 @@ import {
   updateCalendarEvent,
   deleteCalendarEvent,
 } from "@/lib/googleCalendar";
-import { localDateTimeToISOString } from "@/lib/dateUtils";
+import { localDateTimeToISOString, addDaysISO } from "@/lib/dateUtils";
 
 export const CALENDAR_TOOLS: Tool[] = [
   {
@@ -141,11 +141,25 @@ async function mirrorEventCreateToTask(
 ) {
   try {
     const allDay = isAllDayValue(args.start_datetime);
+    const startDate = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
+    // Viacdňová udalosť (napr. dovolenka nadiktovaná hlasom "od pondelka
+    // do piatku") — nastavíme aj start_date, nech sa v Kalendári appky
+    // zobrazí na každom dni rozsahu, nie iba prvom (rovnaký princíp ako
+    // eventToTaskFields v lib/server/googleCalendarSync.ts). Google pri
+    // celodenných udalostiach vracia end_datetime EXKLUZÍVNE.
+    const dueDate = args.end_datetime
+      ? allDay
+        ? addDaysISO(args.end_datetime, -1)
+        : args.end_datetime.slice(0, 10)
+      : startDate;
     await supabase.from("tasks").insert({
       title: args.summary,
       description: args.description || null,
-      due_date: allDay ? args.start_datetime : args.start_datetime.slice(0, 10),
+      start_date: startDate,
+      due_date: dueDate,
       scheduled_time: allDay ? null : localDateTimeToISOString(args.start_datetime),
+      scheduled_time_end:
+        allDay || !args.end_datetime ? null : localDateTimeToISOString(args.end_datetime),
       google_event_id: eventId,
     });
   } catch (err) {
@@ -160,8 +174,21 @@ async function mirrorEventUpdateToTask(supabase: SupabaseClient, args: Record<st
     if (args.description !== undefined) patch.description = args.description;
     if (args.start_datetime !== undefined) {
       const allDay = isAllDayValue(args.start_datetime);
-      patch.due_date = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
+      const startDate = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
+      patch.start_date = startDate;
+      patch.due_date = startDate;
       patch.scheduled_time = allDay ? null : localDateTimeToISOString(args.start_datetime);
+      // end_datetime prišlo v tom istom volaní ako start_datetime — vieme
+      // bezpečne dopočítať due_date pre viacdňový rozsah (allDay-osť je
+      // istá zo start_datetime). Ak prišlo iba end_datetime bez
+      // start_datetime, due_date radšej nemeníme (nevieme spoľahlivo
+      // zistiť, či ide o celodennú udalosť, bez načítania úlohy z DB).
+      if (args.end_datetime !== undefined) {
+        patch.due_date = allDay
+          ? addDaysISO(args.end_datetime, -1)
+          : args.end_datetime.slice(0, 10);
+        patch.scheduled_time_end = allDay ? null : localDateTimeToISOString(args.end_datetime);
+      }
     }
     if (Object.keys(patch).length === 0) return;
     await supabase.from("tasks").update(patch).eq("google_event_id", args.event_id);

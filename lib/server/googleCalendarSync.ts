@@ -22,6 +22,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { getAccessToken, localDateInBratislava } from "./googleCalendarAdmin";
+import { addDaysISO } from "@/lib/dateUtils";
 
 const CALENDAR_ID = "primary";
 const SYNC_STATE_ID = "primary";
@@ -121,16 +122,33 @@ export async function ensureWatchChannel(admin: SupabaseClient): Promise<{
   return { renewed: true, expiration };
 }
 
+// 2026-09-24 — viacdňové udalosti: predtým sa ukladal iba `due_date` =
+// prvý deň, takže sa v Kalendári appky zobrazovali len na prvom dni.
+// Teraz nastavujeme aj `start_date`, nech úloha "pokrýva" celý rozsah
+// (Kalendár stránka appky (app/(app)/calendar/page.tsx) rovnakú úlohu
+// vykreslí do KAŽDÉHO dňa medzi start_date a due_date — je to stále
+// jeden riadok v `tasks`, takže úprava z ktoréhokoľvek dňa upraví
+// tú istú udalosť všade). Google pri celodenných udalostiach vracia
+// `end.date` EXKLUZÍVNE (deň PO poslednom dni) — posledný skutočný deň
+// je preto `addDaysISO(end.date, -1)`.
 function eventToTaskFields(event: any) {
   const allDay = !!event.start?.date;
-  const startValue: string | undefined = event.start?.date || event.start?.dateTime;
-  const endValue: string | undefined = event.end?.date || event.end?.dateTime;
+  const startRaw: string | undefined = event.start?.date || event.start?.dateTime;
+  const endRaw: string | undefined = event.end?.date || event.end?.dateTime;
+
+  const startDate = startRaw ? (allDay ? startRaw : localDateInBratislava(startRaw)) : null;
+  let dueDate = startDate;
+  if (endRaw) {
+    dueDate = allDay ? addDaysISO(endRaw, -1) : localDateInBratislava(endRaw);
+  }
+
   return {
     title: event.summary || "(bez názvu)",
     description: event.description || null,
-    due_date: allDay ? startValue : startValue ? localDateInBratislava(startValue) : null,
-    scheduled_time: allDay ? null : startValue || null,
-    scheduled_time_end: allDay ? null : endValue || null,
+    start_date: startDate,
+    due_date: dueDate,
+    scheduled_time: allDay ? null : startRaw || null,
+    scheduled_time_end: allDay ? null : endRaw || null,
   };
 }
 

@@ -13,7 +13,7 @@ import {
   deleteTask,
 } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
-import { toISODate, startOfWeek, fromISODate, todayISO } from "@/lib/dateUtils";
+import { toISODate, startOfWeek, fromISODate, todayISO, addDaysISO } from "@/lib/dateUtils";
 import { sortTasksForDisplay } from "@/lib/taskSort";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import TaskRow from "@/components/ui/TaskRow";
@@ -183,11 +183,20 @@ export default function CalendarPage() {
         getUnassignedTasks(supabase) as Promise<Task[]>,
         getProjects(supabase) as Promise<Project[]>,
       ]);
+      // Viacdňová úloha (start_date odlišný od due_date — typicky
+      // zrkadlená viacdňová Google Calendar udalosť, pozri
+      // lib/server/googleCalendarSync.ts) sa vykreslí do KAŽDÉHO dňa
+      // svojho rozsahu, nie iba pod due_date — je to stále ten istý
+      // riadok v `tasks`, takže úprava z ktoréhokoľvek dňa mení tú istú
+      // úlohu (a teda tú istú Google Calendar udalosť) všade.
       const grouped: Record<string, Task[]> = {};
       for (const t of weekTasks) {
-        const key = t.due_date as string;
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(t);
+        const due = t.due_date as string;
+        const start = t.start_date || due;
+        for (let day = start; day <= due; day = addDaysISO(day, 1)) {
+          if (!grouped[day]) grouped[day] = [];
+          grouped[day].push(t);
+        }
       }
       setTasksByDay(grouped);
       setPool(unassigned);
