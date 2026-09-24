@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runIncrementalSync } from "@/lib/server/googleCalendarSync";
 
+export const maxDuration = 60;
+
 // Google Calendar Push Notifications — pozri lib/server/googleCalendarSync.ts
 // pre celý kontext. Google sem POSTuje vždy, keď sa v primárnom kalendári
 // niečo zmení (bez dát o samotnej udalosti, iba "niečo sa zmenilo, over

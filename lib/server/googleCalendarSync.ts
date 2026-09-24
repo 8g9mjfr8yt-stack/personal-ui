@@ -136,45 +136,66 @@ function eventToTaskFields(event: any) {
 
 // Spracuje dávku zmenených udalostí z events.list a premietne ich do
 // `tasks`. Vracia počty pre logovanie/diagnostiku.
+//
+// Zámerne dávkovo (nie sekvenčne po jednej udalosti): pri prvotnom
+// (neinkrementálnom) syncu môže ísť o desiatky-stovky udalostí naraz a
+// sekvenčné volania (1-2 DB round-tripy na udalosť, čakajúc na každú)
+// vedeli spoľahlivo prekročiť timeout serverless funkcie.
 async function applyEvents(admin: SupabaseClient, events: any[]) {
-  let created = 0;
-  let updated = 0;
+  const cancelledIds = events.filter((e) => e.id && e.status === "cancelled").map((e) => e.id);
+  const active = events.filter((e) => e.id && e.status !== "cancelled");
+
   let deleted = 0;
-  for (const event of events) {
-    if (!event.id) continue;
-    if (event.status === "cancelled") {
-      const { error, count } = await admin
-        .from("tasks")
-        .delete({ count: "exact" })
-        .eq("google_event_id", event.id);
-      if (error) console.error("calendar-sync: zmazanie úlohy zlyhalo:", error);
-      else if (count) deleted += count;
-      continue;
-    }
-
-    const fields = eventToTaskFields(event);
-    const { data: existing, error: selErr } = await admin
+  if (cancelledIds.length > 0) {
+    const { error, count } = await admin
       .from("tasks")
-      .select("id")
-      .eq("google_event_id", event.id)
-      .maybeSingle();
-    if (selErr) {
-      console.error("calendar-sync: vyhľadanie úlohy zlyhalo:", selErr);
-      continue;
-    }
+      .delete({ count: "exact" })
+      .in("google_event_id", cancelledIds);
+    if (error) console.error("calendar-sync: zmazanie úloh zlyhalo:", error);
+    else if (count) deleted = count;
+  }
 
-    if (existing) {
-      const { error } = await admin.from("tasks").update(fields).eq("id", existing.id);
-      if (error) console.error("calendar-sync: aktualizácia úlohy zlyhala:", error);
+  if (active.length === 0) return { created: 0, updated: 0, deleted };
+
+  const activeIds = active.map((e) => e.id);
+  const { data: existingRows, error: selErr } = await admin
+    .from("tasks")
+    .select("id, google_event_id")
+    .in("google_event_id", activeIds);
+  if (selErr) {
+    console.error("calendar-sync: vyhľadanie úloh zlyhalo:", selErr);
+    return { created: 0, updated: 0, deleted };
+  }
+  const existingByEventId = new Map((existingRows || []).map((r) => [r.google_event_id as string, r.id as string]));
+
+  const toInsert = active
+    .filter((e) => !existingByEventId.has(e.id))
+    .map((e) => ({ ...eventToTaskFields(e), google_event_id: e.id }));
+  const toUpdate = active.filter((e) => existingByEventId.has(e.id));
+
+  let created = 0;
+  if (toInsert.length > 0) {
+    const { error, count } = await admin.from("tasks").insert(toInsert, { count: "exact" } as any);
+    if (error) console.error("calendar-sync: vytvorenie úloh zlyhalo:", error);
+    else created = count || toInsert.length;
+  }
+
+  let updated = 0;
+  if (toUpdate.length > 0) {
+    const results = await Promise.all(
+      toUpdate.map((e) =>
+        admin
+          .from("tasks")
+          .update(eventToTaskFields(e))
+          .eq("id", existingByEventId.get(e.id) as string)
+      )
+    );
+    for (const r of results) {
+      if (r.error) console.error("calendar-sync: aktualizácia úlohy zlyhala:", r.error);
       else updated += 1;
-    } else {
-      const { error } = await admin
-        .from("tasks")
-        .insert({ ...fields, google_event_id: event.id });
-      if (error) console.error("calendar-sync: vytvorenie úlohy zlyhalo:", error);
-      else created += 1;
     }
   }
+
   return { created, updated, deleted };
 }
 
@@ -197,8 +218,21 @@ export async function runIncrementalSync(admin: SupabaseClient) {
 
   do {
     const search = new URLSearchParams({ singleEvents: "true", maxResults: "250" });
-    if (pageToken) search.set("pageToken", pageToken);
-    else if (syncToken) search.set("syncToken", syncToken);
+    if (pageToken) {
+      search.set("pageToken", pageToken);
+    } else if (syncToken) {
+      search.set("syncToken", syncToken);
+    } else {
+      // Prvotný (nie inkrementálny) sync — Google dovoľuje timeMin/timeMax
+      // iba TU, nie pri nasledujúcich syncToken volaniach (tie by ich
+      // ignorovali/chybovali). Toto ohraničenie sa potom "prilepí" k
+      // vydanému syncTokenu na celú jeho životnosť — zámerne neťaháme
+      // celú históriu kalendára (pomalé, aj zbytočné), iba nedávnu
+      // minulosť a rozumný kus budúcnosti.
+      const now = Date.now();
+      search.set("timeMin", new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString());
+      search.set("timeMax", new Date(now + 400 * 24 * 60 * 60 * 1000).toISOString());
+    }
 
     const res = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${search.toString()}`,

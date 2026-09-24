@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureWatchChannel, runIncrementalSync } from "@/lib/server/googleCalendarSync";
 
+export const maxDuration = 60;
+
 // Denný Vercel Cron (pozri vercel.json) — dve úlohy:
 // 1. Obnoví Google Calendar "watch" kanál, ak mu čoskoro (do 48h) vyprší
 //    platnosť, alebo ešte vôbec neexistuje (prvé spustenie po nasadení).
