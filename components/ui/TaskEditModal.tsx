@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { toLocalDateTimeInputValue } from "@/lib/dateUtils";
 
 export type TaskEditModalProject = { id: string; name: string };
 
@@ -13,6 +14,7 @@ export type TaskEditModalInitial = {
   due_date?: string | null;
   start_date?: string | null;
   scheduled_time?: string | null;
+  scheduled_time_end?: string | null;
   estimated_minutes?: number | null;
   context?: string | null;
   status?: string | null;
@@ -26,6 +28,7 @@ export type TaskEditModalValues = {
   due_date: string | null;
   start_date: string | null;
   scheduled_time: string | null;
+  scheduled_time_end: string | null;
   estimated_minutes: number | null;
   context: string | null;
   status: string;
@@ -58,7 +61,10 @@ export default function TaskEditModal({
   const [dueDate, setDueDate] = useState(initial.due_date || "");
   const [startDate, setStartDate] = useState(initial.start_date || "");
   const [scheduledTime, setScheduledTime] = useState(
-    initial.scheduled_time ? initial.scheduled_time.slice(0, 16) : ""
+    initial.scheduled_time ? toLocalDateTimeInputValue(initial.scheduled_time) : ""
+  );
+  const [scheduledTimeEnd, setScheduledTimeEnd] = useState(
+    initial.scheduled_time_end ? toLocalDateTimeInputValue(initial.scheduled_time_end) : ""
   );
   const [estimatedMinutes, setEstimatedMinutes] = useState(
     initial.estimated_minutes != null ? String(initial.estimated_minutes) : ""
@@ -78,7 +84,12 @@ export default function TaskEditModal({
       project_id: projectId || null,
       due_date: dueDate || null,
       start_date: startDate || null,
-      scheduled_time: scheduledTime ? new Date(scheduledTime).toISOString() : null,
+      // Naschvál BEZ .toISOString() tu — pošleme naivnú lokálnu hodnotu z
+      // <input type="datetime-local"> tak, ako je, a bezpečnú konverziu na
+      // UTC (imúnnu voči Safari rozdielom v parsovaní) urobí
+      // normalizeScheduledTime v lib/supabase/tasks.ts.
+      scheduled_time: scheduledTime || null,
+      scheduled_time_end: scheduledTimeEnd || null,
       estimated_minutes: estimatedMinutes.trim() ? Number(estimatedMinutes) : null,
       context: context.trim() || null,
       status,
@@ -178,7 +189,7 @@ export default function TaskEditModal({
 
         <div className="flex gap-2">
           <label className="flex w-1/2 flex-col gap-1 text-xs text-da-meta">
-            Presný čas (nepovinné)
+            Začiatok (nepovinné)
             <input
               type="datetime-local"
               value={scheduledTime}
@@ -187,16 +198,26 @@ export default function TaskEditModal({
             />
           </label>
           <label className="flex w-1/2 flex-col gap-1 text-xs text-da-meta">
-            Odhad (min)
+            Koniec (nepovinné)
             <input
-              type="number"
-              min="0"
-              value={estimatedMinutes}
-              onChange={(e) => setEstimatedMinutes(e.target.value)}
+              type="datetime-local"
+              value={scheduledTimeEnd}
+              onChange={(e) => setScheduledTimeEnd(e.target.value)}
               className="rounded-lg border border-da-border bg-da-card px-2 py-2 text-sm text-da-text"
             />
           </label>
         </div>
+
+        <label className="flex flex-col gap-1 text-xs text-da-meta">
+          Odhad trvania (min, nepovinné)
+          <input
+            type="number"
+            min="0"
+            value={estimatedMinutes}
+            onChange={(e) => setEstimatedMinutes(e.target.value)}
+            className="rounded-lg border border-da-border bg-da-card px-2 py-2 text-sm text-da-text"
+          />
+        </label>
 
         <input
           type="text"

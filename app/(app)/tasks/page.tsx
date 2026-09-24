@@ -20,6 +20,7 @@ type Task = {
   due_date: string | null;
   start_date: string | null;
   scheduled_time: string | null;
+  scheduled_time_end: string | null;
   depends_on_task_id: string | null;
   parent_task_id: string | null;
   context: string | null;
@@ -204,6 +205,7 @@ export default function TasksPage() {
       due_date: t.due_date,
       start_date: t.start_date,
       scheduled_time: t.scheduled_time,
+      scheduled_time_end: t.scheduled_time_end,
       estimated_minutes: t.estimated_minutes,
       context: t.context,
       status: t.status,
