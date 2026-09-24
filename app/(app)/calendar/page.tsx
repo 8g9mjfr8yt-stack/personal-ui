@@ -582,9 +582,9 @@ export default function CalendarPage() {
           type="button"
           aria-label="Nová úloha na vybraný deň"
           onClick={openCreate}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-da-accent text-white"
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-da-chip-bg text-da-chip-text"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
@@ -630,9 +630,9 @@ export default function CalendarPage() {
                         onClick={() => handleAssign(t.id)}
                         disabled={busyId === t.id}
                         aria-label={`Priradiť na vybraný deň: ${t.title}`}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-da-accent text-white disabled:opacity-50"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-da-chip-bg text-da-chip-text disabled:opacity-50"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                           <line x1="12" y1="5" x2="12" y2="19" />
                           <line x1="5" y1="12" x2="19" y2="12" />
                         </svg>

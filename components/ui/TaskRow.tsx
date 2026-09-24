@@ -307,7 +307,7 @@ export default function TaskRow({
               type="button"
               aria-label="Pridať podúlohu"
               onClick={onAddSubtask}
-              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center self-end"
+              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center"
               style={{ color: accent }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
