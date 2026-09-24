@@ -16,7 +16,7 @@ import {
 import ProgressRing from "@/components/ui/ProgressRing";
 import TaskRow from "@/components/ui/TaskRow";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
-import { ACCENT_SWATCHES, accentOrDefault } from "@/lib/colorUtils";
+import { ACCENT_SWATCHES, accentOrDefault, accentColor } from "@/lib/colorUtils";
 import { sortTasksForDisplay } from "@/lib/taskSort";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 
@@ -134,9 +134,9 @@ function ProjectForm({
             aria-label="Bez vlastnej farby"
             onClick={() => setColor(null)}
             className="flex h-7 w-7 items-center justify-center rounded-full border-2"
-            style={{ borderColor: color === null ? "#211E1B" : "transparent", background: "#F1EEE7" }}
+            style={{ borderColor: color === null ? "rgb(var(--da-text))" : "transparent", background: "rgb(var(--da-chip-bg))" }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A8172" strokeWidth="2.4" strokeLinecap="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgb(var(--da-chip-text))" strokeWidth="2.4" strokeLinecap="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -148,7 +148,7 @@ function ProjectForm({
               aria-label={`Farba ${sw}`}
               onClick={() => setColor(sw)}
               className="h-7 w-7 rounded-full border-2"
-              style={{ background: sw, borderColor: color === sw ? "#211E1B" : "transparent" }}
+              style={{ background: sw, borderColor: color === sw ? "rgb(var(--da-text))" : "transparent" }}
             />
           ))}
           <input
@@ -165,7 +165,7 @@ function ProjectForm({
         <button
           type="submit"
           disabled={saving || !name.trim()}
-          className="flex-grow rounded-lg bg-da-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="flex-grow rounded-lg bg-da-accent px-4 py-2 text-sm font-medium text-da-on-accent disabled:opacity-50"
         >
           {saving ? "Ukladám…" : submitLabel}
         </button>
@@ -442,19 +442,12 @@ export default function ProjectsPage() {
     }
   }
 
-  const activeCount = projects?.filter((p) => p.status === "active").length ?? 0;
-  const plannedCount = projects?.filter((p) => p.status !== "active" && p.status !== "done").length ?? 0;
 
   return (
     <div className="px-5 pt-6">
-      <div className="mb-1 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-[21px] font-bold">Projekty</h1>
       </div>
-      {projects !== null && (
-        <p className="mb-4 text-sm text-da-meta">
-          {activeCount} aktívne{plannedCount > 0 ? ` · ${plannedCount} plánovaných` : ""}
-        </p>
-      )}
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       {projects === null && !error && <p className="text-da-muted">Načítavam…</p>}
@@ -468,7 +461,7 @@ export default function ProjectsPage() {
           const doneCount = tasks.filter((t) => t.status === "done").length;
           const percent = tasks.length > 0 ? doneCount / tasks.length : 0;
           const isExpanded = !!expandedProjects[p.id];
-          const accent = accentOrDefault(p.accent_color);
+          const accent = accentColor(p.accent_color);
 
           const groups: Record<string, Task[]> = { done: [], progress: [], planned: [] };
           for (const t of tasks) groups[groupKey(t.status)].push(t);
@@ -515,8 +508,8 @@ export default function ProjectsPage() {
                       <span
                         className="rounded-full px-2 py-0.5 text-[11px]"
                         style={{
-                          background: p.status === "active" ? "#E7EFE7" : "#F1EEE7",
-                          color: p.status === "active" ? "#3F5C48" : "#8A8172",
+                          background: p.status === "active" ? "rgb(var(--da-accent-soft))" : "rgb(var(--da-chip-bg))",
+                          color: p.status === "active" ? "rgb(var(--da-accent-soft-text))" : "rgb(var(--da-chip-text))",
                         }}
                       >
                         {p.status === "active" ? "Aktívny" : p.status === "done" ? "Hotový" : "Plánovaný"}
@@ -646,7 +639,7 @@ export default function ProjectsPage() {
                           type="button"
                           onClick={() => handleAssignExisting(p.id)}
                           disabled={!assignPicks[p.id]}
-                          className="shrink-0 rounded-lg bg-da-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                          className="shrink-0 rounded-lg bg-da-accent px-3 py-1.5 text-xs font-medium text-da-on-accent disabled:opacity-50"
                         >
                           Priradiť
                         </button>

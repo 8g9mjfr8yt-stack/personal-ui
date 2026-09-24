@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "Denný agent",
@@ -40,7 +41,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="sk">
+    // suppressHydrationWarning: atribút data-theme nastaví inline skript
+    // ešte pred hydratáciou (nočný režim, pozri lib/theme.ts).
+    <html lang="sk" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
       <body className="min-h-screen bg-da-bg font-sora text-da-text">
         {children}
       </body>

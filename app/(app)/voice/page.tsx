@@ -14,7 +14,7 @@ export default function VoicePage() {
   return (
     <div>
       <h1 className="mb-4 text-xl font-semibold">Hlas</h1>
-      <p className="mb-6 text-neutral-500">
+      <p className="mb-6 text-da-meta">
         Realtime hlasový rozhovor s agentom cez Gemini Live. Agent vie počas
         rozhovoru čítať, vytvárať, upravovať, dokončovať aj mazať úlohy,
         projekty, poznámky a ďalšie dáta priamo v databáze. Rovnaký
@@ -25,7 +25,7 @@ export default function VoicePage() {
       <button
         onClick={isBusy ? stop : start}
         disabled={status === "connecting"}
-        className="rounded-lg bg-neutral-900 px-5 py-2.5 text-white disabled:opacity-50"
+        className="rounded-lg bg-da-accent px-5 py-2.5 text-da-on-accent disabled:opacity-50"
       >
         {status === "live" || status === "reconnecting"
           ? "Ukončiť rozhovor"
@@ -34,7 +34,7 @@ export default function VoicePage() {
           : "Spustiť rozhovor"}
       </button>
 
-      <p className="mt-4 text-sm text-neutral-500">
+      <p className="mt-4 text-sm text-da-meta">
         Stav: {voiceStatusLabel(status)}
       </p>
 

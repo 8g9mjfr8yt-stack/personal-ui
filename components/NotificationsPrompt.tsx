@@ -32,13 +32,13 @@ export default function NotificationsPrompt() {
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-da-border bg-da-card px-4 py-3 text-sm">
       <span>🔔 Povoliť notifikácie priamo v appke?</span>
       <div className="flex items-center gap-2">
         <button
           onClick={handleClick}
           disabled={busy}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-white disabled:opacity-50"
+          className="rounded-md bg-da-accent px-3 py-1.5 text-da-on-accent disabled:opacity-50"
         >
           {busy ? "Povoľujem…" : "Povoliť"}
         </button>

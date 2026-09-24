@@ -4,10 +4,10 @@ export const metadata = {
 
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12 text-neutral-900">
+    <main className="mx-auto max-w-2xl px-6 py-12 text-da-text">
       <h1 className="mb-6 text-2xl font-semibold">Ochrana súkromia</h1>
 
-      <p className="mb-4 text-sm text-neutral-500">Posledná aktualizácia: 17. 9. 2026</p>
+      <p className="mb-4 text-sm text-da-meta">Posledná aktualizácia: 17. 9. 2026</p>
 
       <p className="mb-4">
         „Denný agent“ je súkromná osobná aplikácia. Nie je verejná služba —

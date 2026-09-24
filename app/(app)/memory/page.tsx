@@ -81,7 +81,7 @@ export default function MemoryPage() {
             onClick={() => setStatusFilter(s)}
             className={
               statusFilter === s
-                ? "shrink-0 rounded-full bg-da-accent px-3.5 py-2 text-xs font-semibold text-white"
+                ? "shrink-0 rounded-full bg-da-accent px-3.5 py-2 text-xs font-semibold text-da-on-accent"
                 : "shrink-0 rounded-full bg-da-chip-bg px-3.5 py-2 text-xs text-da-chip-text"
             }
           >
@@ -116,10 +116,10 @@ export default function MemoryPage() {
                 style={{
                   color:
                     m.status === "active"
-                      ? "#3F5C48"
+                      ? "rgb(var(--da-accent-soft-text))"
                       : m.status === "rejected"
-                      ? "#B4776B"
-                      : "#9A9384",
+                      ? "rgb(var(--da-danger))"
+                      : "rgb(var(--da-muted))",
                 }}
               >
                 {STATUS_LABEL[m.status] || m.status}

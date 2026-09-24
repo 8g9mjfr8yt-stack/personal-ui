@@ -17,6 +17,7 @@ import { sortTasksForDisplay } from "@/lib/taskSort";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import NotificationsPrompt from "@/components/NotificationsPrompt";
 import TaskRow from "@/components/ui/TaskRow";
+import DoneDock from "@/components/ui/DoneDock";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
 type Task = {
@@ -75,8 +76,9 @@ function taskMeta(t: Task, day: string): string | null {
 // Denný agent 2.0 — "Dnes": tasks s due_date = dnes (oprava
 // 2026-09-23: dnešný rozsah sa teraz počíta cez lokálne dateUtils,
 // pôvodný toISOString().slice(0,10) mohol pri kladnom časovom pásme
-// vrátiť včerajší dátum). Hotové úlohy OSTÁVAJÚ v zozname (len
-// vizuálne odlíšené). Každá úloha sa dá rozbaliť/pridať jej podúlohu
+// vrátiť včerajší dátum). Hotové úlohy sa (Denný agent 2.1) presúvajú
+// do sekcie "Hotové" na spodku obrazovky (components/ui/DoneDock.tsx),
+// menej výrazné; "+" ostáva pod poslednou nedokončenou úlohou. Každá úloha sa dá rozbaliť/pridať jej podúlohu
 // bez ohľadu na to, či už nejakú má, upraviť (celý formulár vrátane
 // projektu) aj zmazať.
 //
@@ -289,6 +291,43 @@ export default function TodayPage() {
     }
   }
 
+  function renderRow(t: Task, faded = false) {
+    const subs = subtasksByParent[t.id] || [];
+    const project = projectFor(t.project_id);
+    return (
+      <TaskRow
+        key={t.id}
+        faded={faded}
+        title={t.title}
+        meta={taskMeta(t, todayISO())}
+        priority={t.priority}
+        compactMeta
+        done={t.status === "done"}
+        busy={busyId === t.id}
+        projectLabel={project?.name}
+        projectColor={project?.accent_color}
+        subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
+        expanded={!!expanded[t.id]}
+        onToggleDone={() => handleToggleDone(t)}
+        onToggleExpand={() => handleToggleExpand(t.id)}
+        onToggleSubtask={(subId) => {
+          const sub = subs.find((s) => s.id === subId);
+          if (sub) handleToggleSubtask(sub);
+        }}
+        onAddSubtask={() => handleAddSubtask(t.id)}
+        onEdit={() => openEdit(t)}
+        onDelete={() => handleDelete(t)}
+        projects={projects}
+        currentProjectId={t.project_id}
+        onAssignProject={(pid) => handleAssignProject(t.id, pid)}
+      />
+    );
+  }
+
+  const sorted = tasks ? sortTasksForDisplay(tasks) : [];
+  const openTasks = sorted.filter((t) => t.status !== "done");
+  const doneTasks = sorted.filter((t) => t.status === "done");
+
   return (
     <div className="px-5 pt-6">
       <div className="mb-1 flex items-center justify-between">
@@ -308,39 +347,9 @@ export default function TodayPage() {
         <p className="text-da-muted">Na dnes nemáš žiadne naplánované úlohy.</p>
       )}
 
-      {tasks !== null && tasks.length > 0 && (
+      {tasks !== null && openTasks.length > 0 && (
         <div className="flex flex-col gap-2.5 pb-4">
-          {sortTasksForDisplay(tasks).map((t) => {
-            const subs = subtasksByParent[t.id] || [];
-            const project = projectFor(t.project_id);
-            return (
-              <TaskRow
-                key={t.id}
-                title={t.title}
-                meta={taskMeta(t, todayISO())}
-                priority={t.priority}
-                compactMeta
-                done={t.status === "done"}
-                busy={busyId === t.id}
-                projectLabel={project?.name}
-                projectColor={project?.accent_color}
-                subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
-                expanded={!!expanded[t.id]}
-                onToggleDone={() => handleToggleDone(t)}
-                onToggleExpand={() => handleToggleExpand(t.id)}
-                onToggleSubtask={(subId) => {
-                  const sub = subs.find((s) => s.id === subId);
-                  if (sub) handleToggleSubtask(sub);
-                }}
-                onAddSubtask={() => handleAddSubtask(t.id)}
-                onEdit={() => openEdit(t)}
-                onDelete={() => handleDelete(t)}
-                projects={projects}
-                currentProjectId={t.project_id}
-                onAssignProject={(pid) => handleAssignProject(t.id, pid)}
-              />
-            );
-          })}
+          {openTasks.map((t) => renderRow(t))}
         </div>
       )}
 
@@ -357,6 +366,8 @@ export default function TodayPage() {
           </svg>
         </button>
       </div>
+
+      <DoneDock count={doneTasks.length}>{doneTasks.map((t) => renderRow(t, true))}</DoneDock>
 
       {modalInitial && (
         <TaskEditModal

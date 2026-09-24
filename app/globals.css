@@ -2,6 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Denný agent 2.1 — farebné tokeny pre denný (predvolený) a nočný režim.
+   Hodnoty sú RGB kanály, aby Tailwind vedel pridať priehľadnosť
+   (pozri tailwind.config.ts). Nočný režim sa zapína v Viac → Vzhľad a
+   nastavuje atribút data-theme="night" na <html> (components/theme). */
+:root {
+  --da-bg: 250 248 245;
+  --da-text: 33 30 27;
+  --da-border: 236 232 225;
+  --da-meta: 110 103 89;
+  --da-muted: 154 147 132;
+  --da-placeholder: 125 116 95;
+  --da-accent: 91 127 102;
+  --da-accent-soft: 231 239 231;
+  --da-accent-soft-text: 63 92 72;
+  --da-card: 255 255 255;
+  --da-chip-bg: 241 238 231;
+  --da-chip-text: 138 129 114;
+  --da-danger: 180 119 107;
+  --da-danger-soft: 247 236 233;
+  --da-track: 231 226 215;
+  --da-nav: 255 255 255;
+  --da-nav-border: 239 235 227;
+  --da-on-accent: 255 255 255;
+  --da-card-shadow: 0 1px 2px rgba(30, 25, 15, 0.04);
+  --da-float-shadow: 0 -8px 24px rgba(30, 25, 15, 0.12);
+  /* Text pilulky projektu = farba projektu zmiešaná s týmto odtieňom
+     (deň: stmaviť, noc: zosvetliť) — lib/colorUtils.ts softText(). */
+  --da-soft-mix: #000000;
+  color-scheme: light;
+}
+
+:root[data-theme="night"] {
+  --da-bg: 19 19 19;
+  --da-text: 242 240 234;
+  --da-border: 42 42 38;
+  --da-meta: 143 139 130;
+  --da-muted: 124 120 110;
+  --da-placeholder: 124 120 110;
+  --da-accent: 95 227 179;
+  --da-accent-soft: 30 52 44;
+  --da-accent-soft-text: 95 227 179;
+  --da-card: 29 29 26;
+  --da-chip-bg: 35 35 32;
+  --da-chip-text: 201 197 185;
+  --da-danger: 232 165 149;
+  --da-danger-soft: 58 40 36;
+  --da-track: 46 46 41;
+  --da-nav: 23 23 21;
+  --da-nav-border: 42 42 38;
+  --da-on-accent: 15 23 18;
+  --da-card-shadow: none;
+  --da-float-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  --da-soft-mix: #ffffff;
+  color-scheme: dark;
+}
+
 /* 2026-09-23 — na mobile (iOS Safari) prehliadač automaticky priblíži
    stránku pri fokuse na akékoľvek pole s font-size < 16px, čo pri
    formulároch (napr. TaskEditModal) spôsobovalo "orezanie"/nedostupné

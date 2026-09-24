@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { accentOrDefault, softBg, softText } from "@/lib/colorUtils";
+import { accentColor, softBg, softText } from "@/lib/colorUtils";
+import ProgressRing from "@/components/ui/ProgressRing";
 import { priorityDisplay } from "@/lib/taskSort";
 
 export type SubtaskVM = {
@@ -37,6 +38,13 @@ export type TaskRowProject = { id: string; name: string };
 // V Projekty je task-row už vnorený v bielej karte projektu, takže tam
 // dostáva `bare` — bez vlastného pozadia/okraja/tieňa, len jemný horný
 // rámik namiesto samostatnej karty.
+//
+// Denný agent 2.1:
+// - krúžok úlohy je ProgressRing — prázdny, s podúlohami ukazuje podiel
+//   hotových podúloh (bez čísla), hotová úloha = plný krúžok s fajkou;
+//   podúlohy majú menší krúžok v rovnakom štýle.
+// - `faded`: menej výrazná karta pre sekciu "Hotové" (Dnes/Kalendár,
+//   components/ui/DoneDock.tsx).
 export default function TaskRow({
   title,
   meta,
@@ -49,6 +57,7 @@ export default function TaskRow({
   expanded,
   busy,
   bare,
+  faded,
   onToggleDone,
   onToggleExpand,
   onToggleSubtask,
@@ -71,6 +80,7 @@ export default function TaskRow({
   expanded: boolean;
   busy?: boolean;
   bare?: boolean;
+  faded?: boolean;
   onToggleDone: () => void;
   onToggleExpand?: () => void;
   onToggleSubtask?: (subId: string) => void;
@@ -85,12 +95,15 @@ export default function TaskRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const hasSubtasks = subtasks.length > 0;
   const doneCount = subtasks.filter((s) => s.done).length;
-  const accent = accentOrDefault(projectColor);
+  const accent = accentColor(projectColor);
+  const ringPercent = done ? 1 : hasSubtasks ? doneCount / subtasks.length : 0;
 
   const hasMenu = !!(onEdit || onDelete || onUnassign || (onAssignProject && projects));
   const showMenuButton = compactMeta ? expanded && hasMenu : hasMenu;
 
-  const wrapperClass = bare
+  const wrapperClass = faded
+    ? "rounded-da-card border border-da-border bg-transparent opacity-60"
+    : bare
     ? "rounded-xl border border-da-border/70"
     : "rounded-da-card border border-da-border bg-da-card shadow-da-card";
 
@@ -123,27 +136,21 @@ export default function TaskRow({
 
   return (
     <div className={`relative ${wrapperClass}`}>
-      <div className="flex items-center gap-2 px-4 py-3.5">
+      <div className={`flex items-center gap-2 px-4 ${faded ? "py-2.5" : "py-3.5"}`}>
         <button
           type="button"
           aria-label={done ? "Vrátiť medzi nedokončené" : "Označiť ako hotové"}
           disabled={busy}
           onClick={onToggleDone}
-          className="h-6 w-6 shrink-0 rounded-full border-2 disabled:opacity-50"
-          style={{
-            background: done ? accent : "transparent",
-            borderColor: done ? accent : "#C9C2B4",
-          }}
-        />
+          className="flex h-6 w-6 shrink-0 items-center justify-center disabled:opacity-50"
+        >
+          <ProgressRing percent={ringPercent} size={24} strokeWidth={3} color={accent} check={done} />
+        </button>
 
         {compactMeta ? (
           <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
             <span
-              className="block text-[15px] font-semibold"
-              style={{
-                color: done ? "#9A9384" : "#211E1B",
-                textDecoration: done ? "line-through" : "none",
-              }}
+              className={`block text-[15px] font-semibold ${done ? "text-da-muted line-through" : "text-da-text"}`}
             >
               {title}
             </span>
@@ -161,11 +168,7 @@ export default function TaskRow({
           <div className="flex min-w-0 flex-grow items-start gap-1">
             <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
               <span
-                className="block text-[15px] font-semibold"
-                style={{
-                  color: done ? "#9A9384" : "#211E1B",
-                  textDecoration: done ? "line-through" : "none",
-                }}
+                className={`block text-[15px] font-semibold ${done ? "text-da-muted line-through" : "text-da-text"}`}
               >
                 {title}
               </span>
@@ -218,7 +221,7 @@ export default function TaskRow({
             onClick={() => setMenuOpen(false)}
             className="fixed inset-0 z-40 cursor-default"
           />
-          <div className="absolute right-3 top-[52px] z-50 flex w-56 flex-col gap-0.5 rounded-2xl border border-da-border bg-white p-1.5 shadow-lg">
+          <div className="absolute right-3 top-[52px] z-50 flex w-56 flex-col gap-0.5 rounded-2xl border border-da-border bg-da-card p-1.5 shadow-lg">
             {onAssignProject && projects && (
               <label className="flex flex-col gap-1 rounded-xl px-2.5 py-1.5 text-xs text-da-meta">
                 Priradiť k projektu
@@ -229,7 +232,7 @@ export default function TaskRow({
                     setMenuOpen(false);
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="rounded-lg border border-da-border px-2 py-1 text-sm text-da-text"
+                  className="rounded-lg border border-da-border bg-da-card px-2 py-1 text-sm text-da-text"
                 >
                   <option value="">— bez projektu —</option>
                   {projects.map((p) => (
@@ -288,16 +291,11 @@ export default function TaskRow({
                 type="button"
                 aria-label={s.done ? "Vrátiť podúlohu" : "Označiť podúlohu ako hotovú"}
                 onClick={() => onToggleSubtask?.(s.id)}
-                className="h-[18px] w-[18px] shrink-0 rounded-full border-2"
-                style={{
-                  background: s.done ? accent : "transparent",
-                  borderColor: s.done ? accent : "#C9C2B4",
-                }}
-              />
-              <span
-                className="text-sm"
-                style={{ color: s.done ? "#9A9384" : "#211E1B", textDecoration: s.done ? "line-through" : "none" }}
+                className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"
               >
+                <ProgressRing percent={s.done ? 1 : 0} size={18} strokeWidth={2.5} color={accent} check={s.done} />
+              </button>
+              <span className={`text-sm ${s.done ? "text-da-muted line-through" : "text-da-text"}`}>
                 {s.title}
               </span>
             </div>
@@ -307,7 +305,7 @@ export default function TaskRow({
               type="button"
               aria-label="Pridať podúlohu"
               onClick={onAddSubtask}
-              className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center"
+              className="-ml-[3px] mt-1 flex h-6 w-6 shrink-0 items-center justify-center"
               style={{ color: accent }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">

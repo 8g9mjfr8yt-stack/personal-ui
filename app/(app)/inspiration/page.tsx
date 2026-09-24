@@ -152,7 +152,7 @@ export default function InspirationPage() {
         <button
           type="submit"
           disabled={saving || (!title.trim() && !sourceUrl.trim() && !file)}
-          className="rounded-full bg-da-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-full bg-da-accent px-4 py-2 text-sm font-medium text-da-on-accent disabled:opacity-50"
         >
           {saving ? "Ukladám…" : "Uložiť inšpiráciu"}
         </button>

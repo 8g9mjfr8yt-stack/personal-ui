@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useVoiceAgent } from "@/lib/voice/VoiceAgentContext";
+import { applyTheme, readTheme } from "@/lib/theme";
 
 // Pripnutá spodná lišta (Denný agent 2.0).
 //
@@ -30,7 +32,7 @@ const RIGHT_TABS = [
 ];
 
 const VOICE_COLORS: Record<string, string> = {
-  idle: "#5B7F66",
+  idle: "rgb(var(--da-accent))",
   connecting: "#C9A24A",
   live: "#B4776B",
   reconnecting: "#C9A24A",
@@ -41,8 +43,15 @@ export default function BottomChrome() {
   const pathname = usePathname();
   const { status, isBusy, start, stop } = useVoiceAgent();
 
+  // Denný agent 2.1 — pre istotu zosynchronizuje režim (aj farbu
+  // meta theme-color) po načítaní; hlavné nastavenie robí inline skript
+  // v app/layout.tsx ešte pred vykreslením.
+  useEffect(() => {
+    applyTheme(readTheme());
+  }, []);
+
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#EFEBE3] bg-white">
+    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-da-nav-border bg-da-nav">
       <div className="mx-auto flex max-w-3xl items-center justify-around px-2 pb-3 pt-2">
         {LEFT_TABS.map((tab) => (
           <TabLink key={tab.href} tab={tab} active={tab.match(pathname || "")} />
@@ -53,8 +62,8 @@ export default function BottomChrome() {
           onClick={isBusy ? stop : start}
           disabled={status === "connecting"}
           aria-label={isBusy ? "Ukončiť hlasový rozhovor" : "Spustiť hlasový rozhovor"}
-          className="-mt-5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-white shadow-lg ring-4 ring-white disabled:opacity-60"
-          style={{ background: VOICE_COLORS[status] || "#5B7F66" }}
+          className={`-mt-5 flex h-14 w-14 shrink-0 items-center justify-center rounded-full shadow-lg ring-4 ring-da-nav disabled:opacity-60 ${status === "idle" ? "text-da-on-accent" : "text-white"}`}
+          style={{ background: VOICE_COLORS[status] || "rgb(var(--da-accent))" }}
         >
           {status === "live" ? (
             <span className="h-3.5 w-3.5 animate-pulse rounded-full bg-white" />
@@ -87,8 +96,7 @@ function TabLink({
   return (
     <Link
       href={tab.href}
-      className="flex flex-col items-center gap-1"
-      style={{ color: active ? "#211E1B" : "#9A9384" }}
+      className={`flex flex-col items-center gap-1 ${active ? "text-da-text" : "text-da-meta"}`}
     >
       <TabIcon label={tab.label} />
       <span className="text-[10px]" style={{ fontWeight: active ? 600 : 400 }}>

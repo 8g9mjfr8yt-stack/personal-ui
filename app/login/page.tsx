@@ -35,7 +35,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         <h1 className="mb-6 text-2xl font-semibold">Denný agent</h1>
         {sent ? (
-          <p className="text-neutral-600">
+          <p className="text-da-meta">
             Poslali sme ti prihlasovací odkaz na <strong>{email}</strong>.
             Skontroluj si e-mail.
           </p>
@@ -47,12 +47,12 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tvoj@email.com"
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 outline-none focus:border-neutral-500"
+              className="w-full rounded-md border border-da-border bg-da-card px-3 py-2 outline-none focus:border-da-meta"
             />
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-md bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
+              className="w-full rounded-md bg-da-accent px-3 py-2 text-da-on-accent disabled:opacity-50"
             >
               {loading ? "Posielam..." : "Poslať prihlasovací odkaz"}
             </button>

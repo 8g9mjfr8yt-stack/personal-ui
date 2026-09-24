@@ -19,6 +19,7 @@ import { sortTasksForDisplay, sortPoolTasks, priorityDisplay } from "@/lib/taskS
 import { softBg, softText } from "@/lib/colorUtils";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
 import TaskRow from "@/components/ui/TaskRow";
+import DoneDock from "@/components/ui/DoneDock";
 import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
 
 type Task = {
@@ -466,7 +467,45 @@ export default function CalendarPage() {
     }
   }
 
+  function renderRow(t: Task, faded = false) {
+    const subs = subtasksByParent[t.id] || [];
+    const project = projectFor(t.project_id);
+    return (
+      <TaskRow
+        key={t.id}
+        faded={faded}
+        title={t.title}
+        meta={taskMeta(t, selectedDay)}
+        priority={t.priority}
+        compactMeta
+        done={t.status === "done"}
+        busy={busyId === t.id}
+        projectLabel={project?.name}
+        projectColor={project?.accent_color}
+        subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
+        expanded={!!expandedTasks[t.id]}
+        onToggleDone={() => handleToggleDone(t)}
+        onToggleExpand={() => setExpandedTasks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
+        onToggleSubtask={(subId) => {
+          const sub = subs.find((s) => s.id === subId);
+          if (sub) handleToggleSubtask(sub);
+        }}
+        onAddSubtask={() => handleAddSubtask(t.id)}
+        onEdit={() => openEdit(t)}
+        onDelete={() => handleDelete(t)}
+        onUnassign={() => handleUnassign(t.id)}
+        projects={projects.map((pr) => ({ id: pr.id, name: pr.name }))}
+        currentProjectId={t.project_id}
+        onAssignProject={(pid) => handleAssignProject(t.id, pid)}
+      />
+    );
+  }
+
   const selectedTasks = sortTasksForDisplay(tasksByDay[selectedDay] || []);
+  // Denný agent 2.1 — hotové úlohy vybraného dňa idú do sekcie "Hotové"
+  // na spodku (DoneDock); otvorený pool ju prekrýva, nevytláča nahor.
+  const openSelected = selectedTasks.filter((t) => t.status !== "done");
+  const doneSelected = selectedTasks.filter((t) => t.status === "done");
 
   return (
     <div className="flex flex-col">
@@ -508,15 +547,12 @@ export default function CalendarPage() {
                 key={iso}
                 onClick={() => setSelectedDay(iso)}
                 className="flex flex-1 flex-col items-center gap-1 rounded-2xl py-2.5"
-                style={{ background: isSelected ? "#5B7F66" : "transparent" }}
+                style={{ background: isSelected ? "rgb(var(--da-accent))" : "transparent" }}
               >
-                <span className="text-[11px]" style={{ color: isSelected ? "#EAF1EA" : "#9A9384" }}>
+                <span className={`text-[11px] ${isSelected ? "text-da-on-accent/85" : "text-da-muted"}`}>
                   {DAY_LABELS[i]}
                 </span>
-                <span
-                  className="text-sm font-semibold"
-                  style={{ color: isSelected ? "#FFFFFF" : "#211E1B" }}
-                >
+                <span className={`text-sm font-semibold ${isSelected ? "text-da-on-accent" : "text-da-text"}`}>
                   {d.getDate()}
                 </span>
                 {hasTasks && !isSelected && <span className="h-1 w-1 rounded-full bg-da-accent" />}
@@ -543,38 +579,7 @@ export default function CalendarPage() {
         {selectedTasks.length === 0 && (
           <p className="py-6 text-center text-sm text-da-muted">Na tento deň nemáš priradené žiadne úlohy.</p>
         )}
-        {selectedTasks.map((t) => {
-          const subs = subtasksByParent[t.id] || [];
-          const project = projectFor(t.project_id);
-          return (
-            <TaskRow
-              key={t.id}
-              title={t.title}
-              meta={taskMeta(t, selectedDay)}
-              priority={t.priority}
-              compactMeta
-              done={t.status === "done"}
-              busy={busyId === t.id}
-              projectLabel={project?.name}
-              projectColor={project?.accent_color}
-              subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
-              expanded={!!expandedTasks[t.id]}
-              onToggleDone={() => handleToggleDone(t)}
-              onToggleExpand={() => setExpandedTasks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
-              onToggleSubtask={(subId) => {
-                const sub = subs.find((s) => s.id === subId);
-                if (sub) handleToggleSubtask(sub);
-              }}
-              onAddSubtask={() => handleAddSubtask(t.id)}
-              onEdit={() => openEdit(t)}
-              onDelete={() => handleDelete(t)}
-              onUnassign={() => handleUnassign(t.id)}
-              projects={projects.map((pr) => ({ id: pr.id, name: pr.name }))}
-              currentProjectId={t.project_id}
-              onAssignProject={(pid) => handleAssignProject(t.id, pid)}
-            />
-          );
-        })}
+        {openSelected.map((t) => renderRow(t))}
       </div>
 
       <div className="flex justify-end px-5 pb-4">
@@ -593,13 +598,18 @@ export default function CalendarPage() {
 
       <div className="h-2" />
 
+      <DoneDock count={doneSelected.length} bottomOffset={44}>
+        {doneSelected.map((t) => renderRow(t, true))}
+      </DoneDock>
+
       {/* Spodný "pool" panel sa vykresľuje priamo nad BottomChrome cez
           rovnaký fixed kontext — jednoduchšie ako počítať výšku susednej
           fixed lišty, tak ho vykreslíme ako súčasť bežného toku a necháme
           mu dostatočný spodný padding v layout.tsx (pb-24 na <main>). */}
       <div className="fixed inset-x-0 bottom-[64px] z-40 mx-auto max-w-3xl px-0">
         {poolOpen && (
-          <div className="max-h-[280px] overflow-y-auto rounded-t-2xl border border-b-0 border-da-border bg-white px-4 pt-3">
+          <div className="max-h-[280px] overflow-y-auto rounded-t-2xl border border-b-0 border-da-border bg-da-card px-4 pt-3"
+            style={{ boxShadow: "var(--da-float-shadow)" }}>
             {pool === null && <p className="py-3 text-sm text-da-muted">Načítavam…</p>}
             {pool !== null && pool.length === 0 && (
               <p className="py-3 text-sm text-da-muted">Žiadne voľné úlohy.</p>
@@ -730,7 +740,7 @@ export default function CalendarPage() {
         )}
         <button
           onClick={togglePool}
-          className="flex w-full items-center justify-center gap-2 border-t border-da-border bg-white py-2.5 text-sm font-medium text-da-meta"
+          className="flex w-full items-center justify-center gap-2 border-t border-da-border bg-da-card py-2.5 text-sm font-medium text-da-meta"
           style={{ borderRadius: poolOpen ? 0 : "16px 16px 0 0" }}
         >
           {poolOpen ? "Skryť voľné úlohy" : "Voľné úlohy na priradenie"}

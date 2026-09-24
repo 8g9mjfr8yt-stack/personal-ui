@@ -242,7 +242,7 @@ export default function TaskEditModal({
         <button
           type="submit"
           disabled={saving || !title.trim()}
-          className="mt-1 rounded-lg bg-da-accent px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+          className="mt-1 rounded-lg bg-da-accent px-4 py-2.5 text-sm font-medium text-da-on-accent disabled:opacity-50"
         >
           {saving ? "Ukladám…" : isEdit ? "Uložiť zmeny" : "Vytvoriť úlohu"}
         </button>

@@ -100,7 +100,7 @@ export default function NotesPage() {
         <button
           type="submit"
           disabled={saving || !content.trim()}
-          className="rounded-full bg-da-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-full bg-da-accent px-4 py-2 text-sm font-medium text-da-on-accent disabled:opacity-50"
         >
           {saving ? "Ukladám…" : "Pridať poznámku"}
         </button>

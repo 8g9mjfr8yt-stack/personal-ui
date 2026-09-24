@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { uploadInboxFile, createInboxItem } from "@/lib/supabase/inbox";
+import ThemeToggle from "@/components/theme/ThemeToggle";
+import { APP_VERSION } from "@/lib/theme";
 
 // Denný agent 2.0 — "Viac": rozcestník na Úlohy / Inbox / Inšpirácia /
 // Poznámky / Pamäť + na spodku sekcie foto-zachytávanie do Inboxu a
@@ -59,7 +61,7 @@ export default function MorePage() {
   return (
     <div className="px-5 pt-6">
       <h1 className="mb-1 text-[21px] font-bold">Viac</h1>
-      <p className="mb-5 text-sm text-da-meta">Ostatné sekcie</p>
+      <p className="mb-5 text-sm text-da-meta">Ostatné sekcie a nastavenia</p>
 
       <div className="mb-5 overflow-hidden rounded-da-card border border-da-border bg-da-card shadow-da-card">
         {ROWS.map((row, i) => (
@@ -67,17 +69,23 @@ export default function MorePage() {
             key={row.href}
             href={row.href}
             className="flex items-center gap-3.5 px-[18px] py-3.5"
-            style={{ borderBottom: i < ROWS.length - 1 ? "1px solid #F1EEE7" : "none" }}
+            style={{ borderBottom: i < ROWS.length - 1 ? "1px solid rgb(var(--da-border))" : "none" }}
           >
             <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-da-chip-bg text-da-accent">
               <RowIcon kind={row.icon} />
             </span>
             <span className="flex-grow text-[15px] font-medium">{row.label}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A9384" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-da-muted" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </Link>
         ))}
+      </div>
+
+      {/* Denný agent 2.1 — Vzhľad: prepínač denný / nočný režim */}
+      <div className="mb-5 flex flex-col gap-2.5">
+        <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-da-meta">Vzhľad</span>
+        <ThemeToggle />
       </div>
 
       <div className="overflow-hidden rounded-da-card border border-da-border bg-da-card shadow-da-card">
@@ -94,7 +102,7 @@ export default function MorePage() {
           onClick={() => fileInputRef.current?.click()}
           disabled={capturing}
           className="flex w-full items-center gap-3.5 px-[18px] py-3.5 text-left disabled:opacity-60"
-          style={{ borderBottom: "1px solid #F1EEE7" }}
+          style={{ borderBottom: "1px solid rgb(var(--da-border))" }}
         >
           <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-da-chip-bg text-da-accent">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -110,10 +118,9 @@ export default function MorePage() {
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3.5 px-[18px] py-3.5 text-left"
-          style={{ color: "#B4776B" }}
+          className="flex w-full items-center gap-3.5 px-[18px] py-3.5 text-left text-da-danger"
         >
-          <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl" style={{ background: "#F7ECE9", color: "#B4776B" }}>
+          <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-xl bg-da-danger-soft text-da-danger">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
               <polyline points="16 17 21 12 16 7" />
@@ -125,6 +132,8 @@ export default function MorePage() {
       </div>
 
       {captureMsg && <p className="mt-3 text-sm text-da-meta">{captureMsg}</p>}
+
+      <p className="mt-3 pb-4 text-center text-xs text-da-meta">Denný agent {APP_VERSION}</p>
     </div>
   );
 }
