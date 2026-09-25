@@ -314,6 +314,10 @@ export default function TodayPage() {
           const sub = subs.find((s) => s.id === subId);
           if (sub) handleToggleSubtask(sub);
         }}
+        onDeleteSubtask={(subId) => {
+          const sub = subs.find((s) => s.id === subId);
+          if (sub) handleDelete(sub);
+        }}
         onAddSubtask={() => handleAddSubtask(t.id)}
         onEdit={() => openEdit(t)}
         onDelete={() => handleDelete(t)}
@@ -328,8 +332,11 @@ export default function TodayPage() {
   const openTasks = sorted.filter((t) => t.status !== "done");
   const doneTasks = sorted.filter((t) => t.status === "done");
 
+  // 2.13 — stránka je flex stĺpec aspoň na výšku obrazovky (mínus
+  // spodná lišta, pb-24 v layoute), aby sekcia Hotové (mt-auto) sedela
+  // na spodku, keď je úloh málo, a pod úlohami, keď ich je veľa.
   return (
-    <div className="px-5 pt-6">
+    <div className="flex min-h-[calc(100dvh-6rem)] flex-col px-5 pt-6">
       <div className="mb-1 flex items-center justify-between">
         <h1 className="text-[21px] font-bold">Dnes</h1>
       </div>
@@ -377,6 +384,15 @@ export default function TodayPage() {
           error={modalError}
           onSave={handleModalSave}
           onClose={() => setModalInitial(null)}
+          onDelete={
+            modalInitial.id
+              ? () => {
+                  const init = modalInitial;
+                  setModalInitial(null);
+                  handleDelete({ id: init.id as string, title: init.title || "" } as Task);
+                }
+              : undefined
+          }
         />
       )}
     </div>

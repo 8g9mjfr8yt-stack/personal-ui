@@ -61,6 +61,7 @@ export default function TaskRow({
   onToggleDone,
   onToggleExpand,
   onToggleSubtask,
+  onDeleteSubtask,
   onAddSubtask,
   onEdit,
   onDelete,
@@ -84,6 +85,7 @@ export default function TaskRow({
   onToggleDone: () => void;
   onToggleExpand?: () => void;
   onToggleSubtask?: (subId: string) => void;
+  onDeleteSubtask?: (subId: string) => void;
   onAddSubtask?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -295,9 +297,22 @@ export default function TaskRow({
               >
                 <ProgressRing percent={s.done ? 1 : 0} size={18} strokeWidth={2.5} color={accent} check={s.done} />
               </button>
-              <span className={`text-sm ${s.done ? "text-da-muted line-through" : "text-da-text"}`}>
+              <span className={`min-w-0 flex-grow text-sm ${s.done ? "text-da-muted line-through" : "text-da-text"}`}>
                 {s.title}
               </span>
+              {onDeleteSubtask && (
+                <button
+                  type="button"
+                  aria-label={`Zmazať podúlohu: ${s.title}`}
+                  onClick={() => onDeleteSubtask(s.id)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
             </div>
           ))}
           {onAddSubtask && (

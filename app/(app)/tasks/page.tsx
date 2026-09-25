@@ -289,6 +289,10 @@ export default function TasksPage() {
                   const sub = subs.find((s) => s.id === subId);
                   if (sub) handleToggleSubtask(sub);
                 }}
+                onDeleteSubtask={(subId) => {
+                  const sub = subs.find((s) => s.id === subId);
+                  if (sub) handleDelete(sub);
+                }}
                 onAddSubtask={() => handleAddSubtask(t.id)}
                 onEdit={() => openEdit(t)}
                 onDelete={() => handleDelete(t)}
@@ -309,6 +313,15 @@ export default function TasksPage() {
           error={modalError}
           onSave={handleModalSave}
           onClose={() => setModalInitial(null)}
+          onDelete={
+            modalInitial.id
+              ? () => {
+                  const init = modalInitial;
+                  setModalInitial(null);
+                  handleDelete({ id: init.id as string, title: init.title || "" } as Task);
+                }
+              : undefined
+          }
         />
       )}
     </div>

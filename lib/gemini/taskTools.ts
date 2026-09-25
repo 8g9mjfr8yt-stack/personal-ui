@@ -25,7 +25,7 @@ export const TASK_TOOLS: Tool[] = [
       {
         name: "get_tasks",
         description:
-          "Vráti zoznam VŠETKÝCH nedokončených top-level úloh používateľa (vrátane due_date/start_date, depends_on_task_id, context a estimated_minutes), zoradených podľa termínu. Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\", alebo \"mám voľných 35 minút, čo sa tam zmestí\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id/parent_task_id inej úlohy.",
+          "Vráti zoznam VŠETKÝCH nedokončených top-level úloh používateľa (vrátane due_date/start_date, depends_on_task_id, context a estimated_minutes), zoradených podľa termínu. Úloha, ktorá má podúlohy, obsahuje aj pole subtasks (id, title, status). Zavolaj toto VŽDY, keď sa používateľ opýta na svoje úlohy alebo plán (napr. \"čo mám dnes\", \"aké mám úlohy\", \"čo mám na budúci týždeň\", \"čo môžem urobiť teraz keď mám vrtačku/je pekný víkend\", alebo \"mám voľných 35 minút, čo sa tam zmestí\") — aj keď si nechce nič upraviť, iba sa pýta. Zavolaj toto aj vtedy, keď potrebuješ zistiť ID konkrétnej úlohy na jej úpravu, dokončenie, zmazanie, alebo ako depends_on_task_id/parent_task_id inej úlohy.",
         parameters: {
           type: Type.OBJECT,
           properties: {
@@ -212,9 +212,12 @@ Pravidlá:
   povie "pridaj podúlohu k X", "rozdeľ X na kroky", najprv (ak ešte
   nemáš ID z rozhovoru) zavolaj get_tasks bez parametra a nájdi ID úlohy
   X, potom zavolaj create_task s parent_task_id=ID úlohy X. Ak sa
-  používateľ pýta, aké podúlohy už nejaká úloha má, zavolaj get_tasks s
-  parametrom parent_task_id=ID danej úlohy — podúlohy sa NIKDY
-  nezobrazujú v bežnom zozname get_tasks bez tohto parametra. Preradiť
+  používateľ pýta, aké podúlohy už nejaká úloha má, pozri pole
+  "subtasks" pri danej úlohe vo výsledku get_tasks (každá úloha ho má,
+  ak má podúlohy — id, title, status). Podúlohy sú bežné úlohy: dajú sa
+  dokončiť (complete_task), upraviť (update_task) aj zmazať (delete_task)
+  podľa ich id z poľa subtasks. Keď hovoríš o úlohe s podúlohami, spomeň
+  aj koľko z nich je hotových. Preradiť
   existujúcu úlohu pod inú (alebo z podúlohy naspäť na top-level) sa dá
   cez update_task s poľom parent_task_id (prázdny reťazec = zrušiť
   vzťah podúlohy).
@@ -266,7 +269,23 @@ export async function runTaskTool(
         if (args?.parent_task_id) {
           return { result: await getSubtasksFor(supabase, [args.parent_task_id]) };
         }
-        return { result: await getTasks(supabase) };
+        {
+          // 2.13 — každá top-level úloha rovno obsahuje aj svoje podúlohy
+          // (id, názov, stav), aby agent o nich vedel bez ďalšieho volania.
+          const tasks = (await getTasks(supabase)) as Array<Record<string, any>>;
+          const subs = (await getSubtasksFor(
+            supabase,
+            tasks.map((t) => t.id)
+          )) as Array<Record<string, any>>;
+          const byParent: Record<string, Array<{ id: string; title: string; status: string }>> = {};
+          for (const st of subs) {
+            const pid = st.parent_task_id as string;
+            (byParent[pid] ||= []).push({ id: st.id, title: st.title, status: st.status });
+          }
+          return {
+            result: tasks.map((t) => (byParent[t.id] ? { ...t, subtasks: byParent[t.id] } : t)),
+          };
+        }
       case "create_task":
         if (!args.title) return { error: "Chýba povinné pole 'title'." };
         return { result: await createTask(supabase, args as any) };

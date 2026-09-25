@@ -475,6 +475,10 @@ export default function CalendarPage() {
           const sub = subs.find((s) => s.id === subId);
           if (sub) handleToggleSubtask(sub);
         }}
+        onDeleteSubtask={(subId) => {
+          const sub = subs.find((s) => s.id === subId);
+          if (sub) handleDelete(sub);
+        }}
         onAddSubtask={() => handleAddSubtask(t.id)}
         onEdit={() => openEdit(t)}
         onDelete={() => handleDelete(t)}
@@ -493,7 +497,7 @@ export default function CalendarPage() {
   const doneSelected = selectedTasks.filter((t) => t.status === "done");
 
   return (
-    <div className="flex flex-col">
+    <div className="flex min-h-[calc(100dvh-6rem)] flex-col">
       <div className="px-5 pb-3 pt-6">
         <h1 className="text-[21px] font-bold">Kalendár</h1>
       </div>
@@ -583,9 +587,11 @@ export default function CalendarPage() {
 
       <div className="h-2" />
 
-      <DoneDock count={doneSelected.length} bottomOffset={44}>
-        {doneSelected.map((t) => renderRow(t, true))}
-      </DoneDock>
+      <div className="mt-auto min-h-[44px] px-5">
+        <DoneDock count={doneSelected.length} bottomOffset={44}>
+          {doneSelected.map((t) => renderRow(t, true))}
+        </DoneDock>
+      </div>
 
       {/* Spodný "pool" panel sa vykresľuje priamo nad BottomChrome cez
           rovnaký fixed kontext — jednoduchšie ako počítať výšku susednej
@@ -723,6 +729,15 @@ export default function CalendarPage() {
           error={modalError}
           onSave={handleModalSave}
           onClose={() => setModalInitial(null)}
+          onDelete={
+            modalInitial.id
+              ? () => {
+                  const init = modalInitial;
+                  setModalInitial(null);
+                  handleDelete({ id: init.id as string, title: init.title || "" } as Task);
+                }
+              : undefined
+          }
         />
       )}
     </div>

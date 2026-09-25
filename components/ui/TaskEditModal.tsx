@@ -44,6 +44,7 @@ export default function TaskEditModal({
   projects,
   onSave,
   onClose,
+  onDelete,
   saving,
   error,
 }: {
@@ -51,6 +52,8 @@ export default function TaskEditModal({
   projects: TaskEditModalProject[];
   onSave: (values: TaskEditModalValues) => void;
   onClose: () => void;
+  // 2.13 — voliteľné "Zmazať úlohu" v režime úpravy
+  onDelete?: () => void;
   saving?: boolean;
   error?: string | null;
 }) {
@@ -262,6 +265,17 @@ export default function TaskEditModal({
         >
           {saving ? "Ukladám…" : isEdit ? "Uložiť zmeny" : "Vytvoriť úlohu"}
         </button>
+
+        {isEdit && onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            disabled={saving}
+            className="rounded-lg px-4 py-2.5 text-sm font-medium text-da-danger disabled:opacity-50"
+          >
+            Zmazať úlohu
+          </button>
+        )}
       </form>
       </div>
     </div>

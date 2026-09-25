@@ -595,6 +595,10 @@ export default function ProjectsPage() {
                               const sub = subs.find((s) => s.id === subId);
                               if (sub) handleToggleSubtask(sub);
                             }}
+                            onDeleteSubtask={(subId) => {
+                              const sub = subs.find((s) => s.id === subId);
+                              if (sub) handleDeleteTask(sub);
+                            }}
                             onAddSubtask={() => handleAddSubtask(t.id)}
                             onEdit={() => openEditTask(t)}
                             onDelete={() => handleDeleteTask(t)}
@@ -696,6 +700,15 @@ export default function ProjectsPage() {
           error={modalError}
           onSave={handleModalSave}
           onClose={() => setModalInitial(null)}
+          onDelete={
+            modalInitial.id
+              ? () => {
+                  const init = modalInitial;
+                  setModalInitial(null);
+                  handleDeleteTask({ id: init.id as string, title: init.title || "" } as Task);
+                }
+              : undefined
+          }
         />
       )}
     </div>
