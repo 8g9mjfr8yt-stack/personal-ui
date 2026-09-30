@@ -373,6 +373,12 @@ export function VoiceAgentProvider({
     };
   }, [prefetchToken]);
 
+  // Po skončení rozhovoru hneď pripraviť ďalší token (inak by opätovné
+  // spustenie do ~10 s čakalo na nový token — meranie: vopred iba 2 z 5).
+  useEffect(() => {
+    if (status === "idle" || status === "error") prefetchToken();
+  }, [status, prefetchToken]);
+
   async function startConversation() {
     setErrorMsg(null);
     setStatus("connecting");
