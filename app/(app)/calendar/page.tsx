@@ -303,9 +303,10 @@ export default function CalendarPage() {
                               type="button"
                               onClick={() => planToSelected(t)}
                               disabled={ui.busyId === t.id}
-                              className="shrink-0 rounded-full bg-da-chip-bg px-2.5 py-1 text-xs font-medium text-da-chip-text disabled:opacity-50"
+                              aria-label={`Naplánovať na ${sd}. ${sm}.`}
+                              className="shrink-0 rounded-full bg-da-accent px-3 py-1.5 text-xs font-semibold text-da-on-accent shadow-sm disabled:opacity-50"
                             >
-                              Na {sd}. {sm}.
+                              + Na {sd}. {sm}.
                             </button>
                           </div>
                           {rowOpen && (

@@ -86,6 +86,20 @@ export function useTaskUi({
     run(t.id, () => deleteTaskV2(createClient(), t), "Nepodarilo sa zmazať úlohu.");
   }
 
+  // „Odobrať z dňa“: plán sa vyprázdni → úloha sa vráti do poolu
+  // (Kedykoľvek / Po termíne). Bol to blok → updateTaskV2 zmaže udalosť v Google.
+  function unplan(t: TaskV2) {
+    setTasks((prev) => prev && prev.filter((x) => x.id !== t.id));
+    run(
+      t.id,
+      () =>
+        updateTaskV2(createClient(), t.id, { plan_start_date: null, plan_end_date: null, plan_start_at: null, plan_end_at: null }).then(() =>
+          reload()
+        ),
+      "Nepodarilo sa odobrať úlohu z dňa."
+    );
+  }
+
   function openCreate(initial: Partial<TaskV2> | null = null) {
     setModalError(null);
     setEditing({ task: initial });
@@ -150,6 +164,7 @@ export function useTaskUi({
         onAddSubtask={() => addSubtask(t)}
         onEdit={() => openEdit(t)}
         onDelete={() => remove(t)}
+        onUnassign={!t.parent_task_id && planMode(t) !== "anytime" ? () => unplan(t) : undefined}
         projects={projects}
         currentProjectId={t.project_id}
         onAssignProject={(pid) => run(t.id, () => updateTaskV2(createClient(), t.id, { project_id: pid }), "Nepodarilo sa priradiť projekt.")}
