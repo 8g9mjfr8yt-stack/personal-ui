@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { readPerf, clearPerf, PERF_EVENT, type PerfEntry } from "@/lib/perf";
-import { LIVE_VARIANTS, LIVE_VARIANT_KEY, resolveVariant, type LiveVariantId } from "@/lib/gemini/liveVariants";
 
 // Fáza 0 — DOČASNÝ panel s meraniami rýchlosti (stránka Viac).
 // Súhrn podľa typu merania (počet, medián, posledná hodnota) + posledné
@@ -16,22 +15,6 @@ function median(values: number[]) {
 export default function PerfPanel() {
   const [entries, setEntries] = useState<PerfEntry[]>([]);
   const [open, setOpen] = useState(false);
-  const [variant, setVariant] = useState<LiveVariantId>("3.1");
-  useEffect(() => {
-    try {
-      setVariant(resolveVariant(window.localStorage.getItem(LIVE_VARIANT_KEY)));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  function pickVariant(v: LiveVariantId) {
-    setVariant(v);
-    try {
-      window.localStorage.setItem(LIVE_VARIANT_KEY, v);
-    } catch {
-      /* ignore */
-    }
-  }
 
   useEffect(() => {
     const refresh = () => setEntries(readPerf());
@@ -59,23 +42,6 @@ export default function PerfPanel() {
       </button>
       {open && (
         <div className="rounded-da-card border border-da-border bg-da-card p-4 text-sm shadow-da-card">
-          <div className="mb-3 flex flex-col gap-1.5">
-            <span className="text-xs text-da-meta">Model hlasu (test) — platí od ďalšieho spustenia hlasu</span>
-            <div className="flex flex-wrap gap-1.5">
-              {(Object.keys(LIVE_VARIANTS) as LiveVariantId[]).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => pickVariant(v)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    variant === v ? "bg-da-accent text-da-on-accent" : "bg-da-chip-bg text-da-chip-text"
-                  }`}
-                >
-                  {LIVE_VARIANTS[v].label}
-                </button>
-              ))}
-            </div>
-          </div>
           {entries.length === 0 ? (
             <p className="text-da-meta">
               Zatiaľ žiadne merania. Spusti hlasový rozhovor alebo otvor Dnes/Kalendár.

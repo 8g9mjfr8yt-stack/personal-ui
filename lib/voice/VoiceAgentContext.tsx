@@ -13,15 +13,10 @@ import { createClient } from "@/lib/supabase/client";
 import { ALL_TOOLS, buildSystemInstruction } from "@/lib/gemini/allTools";
 import { findToolRunner } from "@/lib/voice/toolRunners";
 import { nowInfo, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
-import { recordPerf as recordPerfRaw } from "@/lib/perf";
-import { LIVE_VARIANTS, LIVE_VARIANT_KEY, resolveVariant, type LiveVariantId } from "@/lib/gemini/liveVariants";
+import { recordPerf } from "@/lib/perf";
 
-// DOČASNÉ: variant modelu (test rýchlosti) — meranie hlasu nesie jeho značku
-let currentVariant: LiveVariantId = "3.1";
-function recordPerf(kind: string, label: string, ms: number) {
-  recordPerfRaw(kind, `${label} [${currentVariant}]`, ms);
-}
-
+// Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
+const MODEL = "gemini-3.1-flash-live-preview";
 
 export type VoiceStatus = "idle" | "connecting" | "live" | "reconnecting" | "error";
 
@@ -220,12 +215,10 @@ export function VoiceAgentProvider({
     const ai = aiClientRef.current;
     if (!ai) return;
 
-    const variant = LIVE_VARIANTS[currentVariant];
     const session = await ai.live.connect({
-      model: variant.model,
+      model: MODEL,
       config: {
         responseModalities: [Modality.AUDIO],
-        ...(variant.thinkingConfig ? { thinkingConfig: variant.thinkingConfig as any } : {}),
         // Musí byť identické so zoznamom zamknutým v /api/gemini-token
         // route.ts (server-side liveConnectConstraints.config).
         // v2.2 — spoločný zoznam so serverom (lib/gemini/allTools.ts).
@@ -359,18 +352,7 @@ export function VoiceAgentProvider({
     inputCtxRef.current = inputCtx;
 
     try {
-      let storedVariant: string | null = null;
-      try {
-        storedVariant = window.localStorage.getItem(LIVE_VARIANT_KEY);
-      } catch {
-        /* ignore */
-      }
-      currentVariant = resolveVariant(storedVariant);
-      const tokenRes = await fetch("/api/gemini-token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variant: currentVariant }),
-      });
+      const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
       if (!tokenRes.ok) {
         const body = await tokenRes.json().catch(() => ({}) as any);
         throw new Error(body.error || "Nepodarilo sa získať token zo servera");

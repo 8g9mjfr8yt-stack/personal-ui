@@ -2,21 +2,15 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { NextResponse } from "next/server";
 import { ALL_TOOLS, buildSystemInstruction } from "@/lib/gemini/allTools";
 import { buildTimeContextInstruction, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
-import { LIVE_VARIANTS, resolveVariant } from "@/lib/gemini/liveVariants";
 
 // Musí byť presne rovnaký model ako v app/(app)/voice/page.tsx.
 // Zoznam Live modelov: https://ai.google.dev/gemini-api/docs/models
-// Predvolený model je v lib/gemini/liveVariants.ts (DEFAULT_LIVE_VARIANT).
+const MODEL = "gemini-3.1-flash-live-preview";
 
 // Táto route beží iba na serveri (Next.js Route Handler) — GEMINI_API_KEY
 // sa sem nikdy neposiela do prehliadača. Prehliadač dostane iba krátkodobo
 // platný (ephemeral) token, ktorým sa priamo pripojí na Gemini Live.
-export async function POST(req: Request) {
-  // DOČASNÉ: variant modelu na test rýchlosti (lib/gemini/liveVariants.ts)
-  const body = (await req.json().catch(() => ({}))) as { variant?: unknown };
-  const variantId = resolveVariant(body.variant);
-  const variant = LIVE_VARIANTS[variantId];
-
+export async function POST() {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey) {
@@ -50,10 +44,9 @@ export async function POST(req: Request) {
         // tokenom (issue objavený a opravený 2026-09-13, pozri PROJECT.md
         // časť 23 / poznámky ku kroku 4.4).
         liveConnectConstraints: {
-          model: variant.model,
+          model: MODEL,
           config: {
             responseModalities: [Modality.AUDIO],
-            ...(variant.thinkingConfig ? { thinkingConfig: variant.thinkingConfig as any } : {}),
             // Fáza 4.5 — nástroje na úlohy aj na trvalú pamäť sa spájajú do
             // jedného zoznamu/inštrukcie (Gemini Live berie jeden config
             // na session).
@@ -76,7 +69,7 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ token: token.name, model: variant.model, variant: variantId, timeContext, timeZone });
+    return NextResponse.json({ token: token.name, model: MODEL, timeContext, timeZone });
   } catch (err) {
     console.error("Chyba pri vytváraní ephemeral tokenu pre Gemini Live:", err);
     return NextResponse.json(

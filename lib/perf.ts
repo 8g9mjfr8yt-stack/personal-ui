@@ -6,7 +6,7 @@
 export type PerfEntry = { t: string; kind: string; label: string; ms: number };
 
 const KEY = "da_perf_log";
-const MAX = 300;
+const MAX = 80;
 export const PERF_EVENT = "da-perf";
 
 export function readPerf(): PerfEntry[] {
