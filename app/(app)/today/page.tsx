@@ -134,6 +134,7 @@ export default function TodayPage() {
             renderTask={ui.renderTask}
             onOpenEvent={ui.setOpenEvent}
             emptyText="Na dnes nemáš naplánované žiadne úlohy."
+            startTimeOnly
           />
 
           <div className="flex justify-end pb-4">

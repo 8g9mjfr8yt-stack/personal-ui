@@ -6,7 +6,7 @@
 // Hotové úlohy vracia `doneTasks()` — rodič ich dá do DoneDock.
 
 import type { ReactNode } from "react";
-import { spanDayPosition, spanDays, zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
+import { spanDayPosition, spanDays, zonedDate, zonedTime, DEFAULT_TIME_ZONE } from "@/lib/time";
 import { planMode, plannedDays, rangeIncludes } from "@/lib/model/taskPlan";
 import { timeRangeLabel, shortDate } from "@/lib/model/labels";
 import type { EventRow } from "@/lib/supabase/events";
@@ -48,6 +48,7 @@ export default function DayView({
   renderTask,
   onOpenEvent,
   emptyText,
+  startTimeOnly = false,
 }: {
   day: string;
   events: EventRow[];
@@ -56,6 +57,8 @@ export default function DayView({
   renderTask: (t: TaskV2, opts?: { faded?: boolean; extra?: string | null }) => ReactNode;
   onOpenEvent: (e: EventRow) => void;
   emptyText: string;
+  // Dnes: pri udalosti iba čas začiatku (koniec ukazuje Kalendár)
+  startTimeOnly?: boolean;
 }) {
   const dayEvents = eventsOnDay(events, day);
   const { blocks, dayTasks, rangeTasks } = tasksOnDay(tasks, day);
@@ -95,7 +98,11 @@ export default function DayView({
               {it.kind === "event" ? (
                 <EventCard
                   title={it.e.title}
-                  timeLabel={timeRangeLabel(it.e.start_at!, it.e.end_at!, day)}
+                  timeLabel={
+                    startTimeOnly && zonedDate(it.e.start_at!, TZ) === day
+                      ? zonedTime(it.e.start_at!, TZ)
+                      : timeRangeLabel(it.e.start_at!, it.e.end_at!, day)
+                  }
                   location={it.e.location}
                   dayLabel={eventDayLabel(it.e, day)}
                   onOpen={() => onOpenEvent(it.e)}
