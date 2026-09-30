@@ -25,11 +25,11 @@ export default function EventCard({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-2 rounded-xl bg-da-chip-bg/60 px-3 py-1.5 text-left"
+      className={`flex w-full items-center rounded-xl bg-da-chip-bg/60 py-1.5 text-left ${timeWidth ? "gap-3.5 pl-2 pr-3" : "gap-2 px-3"}`}
     >
       <span
         style={timeWidth ? { width: timeWidth } : undefined}
-        className="shrink-0 whitespace-nowrap text-xs font-semibold tabular-nums text-da-meta"
+        className={`shrink-0 whitespace-nowrap font-semibold tabular-nums text-da-meta ${timeWidth ? "text-[11px]" : "text-xs"}`}
       >
         {timeLabel || "celý deň"}
       </span>

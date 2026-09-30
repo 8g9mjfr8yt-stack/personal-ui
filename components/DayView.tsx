@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { spanDayPosition, spanDays, zonedDate, zonedTime, DEFAULT_TIME_ZONE } from "@/lib/time";
 import { planMode, plannedDays, rangeIncludes } from "@/lib/model/taskPlan";
-import { timeRangeLabel, shortDate } from "@/lib/model/labels";
+import { shortDate } from "@/lib/model/labels";
 import type { EventRow } from "@/lib/supabase/events";
 import type { TaskV2 } from "@/lib/supabase/tasksV2";
 import EventCard from "@/components/ui/EventCard";
@@ -70,10 +70,13 @@ export default function DayView({
     ...dayEvents.filter((e) => !e.all_day).map((e) => ({ kind: "event" as const, start: Date.parse(e.start_at!), e })),
     ...blocks.filter((t) => !isTaskDone(t)).map((t) => ({ kind: "task" as const, start: Date.parse(t.plan_start_at!), t })),
   ].sort((a, b) => a.start - b.start);
-  // stĺpec času: Dnes iba začiatok, Kalendár celý rozsah
-  const timeWidth = startTimeOnly ? 36 : 74;
-  const timeLabelFor = (startAt: string, endAt: string) =>
-    startTimeOnly && zonedDate(startAt, TZ) === day ? zonedTime(startAt, TZ) : timeRangeLabel(startAt, endAt, day);
+  // Stĺpec času udalostí: iba začiatok (koniec je v detaile po kliknutí).
+  // Okraj 8 + čas 30 + medzera 14 = 52 px = okraj úlohy 12 + krúžok 24 + 16,
+  // takže názvy udalostí a úloh začínajú zarovno. Udalosť, ktorá začala
+  // skôr, má „…“.
+  void startTimeOnly;
+  const timeWidth = 30;
+  const timeLabelFor = (startAt: string) => (zonedDate(startAt, TZ) === day ? zonedTime(startAt, TZ) : "…");
   const openDay = dayTasks.filter((t) => !isTaskDone(t));
   const openRange = rangeTasks.filter((t) => !isTaskDone(t));
 
@@ -105,7 +108,7 @@ export default function DayView({
               {it.kind === "event" ? (
                 <EventCard
                   title={it.e.title}
-                  timeLabel={timeLabelFor(it.e.start_at!, it.e.end_at!)}
+                  timeLabel={timeLabelFor(it.e.start_at!)}
                   timeWidth={timeWidth}
                   location={it.e.location}
                   dayLabel={eventDayLabel(it.e, day)}

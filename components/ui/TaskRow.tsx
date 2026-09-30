@@ -228,7 +228,7 @@ export default function TaskRow({
 
   return (
     <div className={`relative ${wrapperClass}`}>
-      <div className={`flex items-center gap-2 ${compactMeta ? `px-3 ${faded ? "py-1.5" : "py-2"}` : `px-4 ${faded ? "py-2.5" : "py-3.5"}`}`}>
+      <div className={`flex items-center ${compactMeta ? `gap-4 px-3 ${faded ? "py-1.5" : "py-2"}` : `gap-2 px-4 ${faded ? "py-2.5" : "py-3.5"}`}`}>
         {leading && (
           <span
             style={{ width: leadingWidth }}
@@ -320,7 +320,7 @@ export default function TaskRow({
       {expanded && (
         <div
           className={`relative flex flex-col border-t border-da-border/70 ${compactMeta ? "gap-1 px-3 py-1.5" : "gap-2 px-4 py-3 pl-[46px]"}`}
-          style={compactMeta ? { paddingLeft: 12 + (leading ? leadingWidth + 8 : 0) + 24 + 8 } : undefined}
+          style={compactMeta ? { paddingLeft: 12 + (leading ? leadingWidth + 16 : 0) + 24 + 16 } : undefined}
         >
           {/* kompaktný režim: „⋮“ až pod deliacou čiarou, zarovnané so stĺpcom
               šípky/„−“ — horná časť karty sa po rozbalení nemení */}
