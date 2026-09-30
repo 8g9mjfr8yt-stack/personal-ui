@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runIncrementalSync } from "@/lib/server/googleCalendarSync";
 import { refreshCalendarProjection } from "@/lib/server/calendarProjection";
 
 export const maxDuration = 60;
@@ -27,21 +26,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, resourceState });
   }
 
+  // v2.2 (2026-10-01): stará synchronizácia Google → tasks (syncToken,
+  // zrkadlové úlohy) je vypnutá. Webhook iba obnoví projekciu `events`
+  // (okno −30/+180 s rekonciliáciou), ktorá zároveň zosúladí bloky úloh.
   try {
     const admin = createAdminClient();
-    const result = await runIncrementalSync(admin);
-    // Fáza 3 prestavby — tieňová obnova okna do `events`. Chyba tu nesmie
-    // ovplyvniť starú synchronizáciu ani odpoveď Googlu.
-    let projection: unknown = null;
-    try {
-      projection = await refreshCalendarProjection(admin);
-    } catch (err) {
-      console.error("calendar-webhook: tieňová obnova events zlyhala:", err);
-      projection = { error: (err as Error)?.message };
-    }
-    return NextResponse.json({ ok: true, resourceState, ...result, projection });
+    const projection = await refreshCalendarProjection(admin);
+    return NextResponse.json({ ok: true, resourceState, projection });
   } catch (err) {
-    console.error("calendar-webhook: synchronizácia zlyhala:", err);
+    console.error("calendar-webhook: obnova events zlyhala:", err);
     // Aj tak 200 — Google by inak kanál po opakovaných chybách zrušil;
     // ďalšia notifikácia alebo denný cron to skúsi znova.
     return NextResponse.json({ ok: false, error: (err as Error)?.message }, { status: 200 });
