@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { uploadInboxFile, createInboxItem } from "@/lib/supabase/inbox";
+import { uploadEntryPhoto, createEntry } from "@/lib/supabase/notebook";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { APP_VERSION } from "@/lib/theme";
 import PerfPanel from "@/components/PerfPanel";
@@ -21,9 +21,7 @@ import PerfPanel from "@/components/PerfPanel";
 // z nej "image" položka v Inboxe (lib/supabase/inbox.ts).
 const ROWS = [
   { href: "/tasks", label: "Úlohy", icon: "tasks" },
-  { href: "/inbox", label: "Inbox", icon: "inbox" },
-  { href: "/inspiration", label: "Inšpirácia", icon: "inspiration" },
-  { href: "/notes", label: "Poznámky", icon: "notes" },
+  { href: "/notebook", label: "Zápisník", icon: "notes" },
   { href: "/memory", label: "Pamäť", icon: "memory" },
 ] as const;
 
@@ -48,9 +46,9 @@ export default function MorePage() {
     setCaptureMsg(null);
     try {
       const supabase = createClient();
-      const path = await uploadInboxFile(supabase, file);
-      await createInboxItem(supabase, path, "image");
-      setCaptureMsg("Fotka uložená do Inboxu.");
+      const path = await uploadEntryPhoto(supabase, file);
+      await createEntry(supabase, { storage_path: path });
+      setCaptureMsg("Fotka uložená do Zápisníka.");
     } catch (err) {
       const e2 = err as Error;
       setCaptureMsg(e2?.message || "Nepodarilo sa uložiť fotku.");
@@ -115,7 +113,7 @@ export default function MorePage() {
             </svg>
           </span>
           <span className="flex-grow text-[15px] font-medium">
-            {capturing ? "Ukladám fotku…" : "Odfotiť do Inboxu"}
+            {capturing ? "Ukladám fotku…" : "Odfotiť do Zápisníka"}
           </span>
         </button>
 
