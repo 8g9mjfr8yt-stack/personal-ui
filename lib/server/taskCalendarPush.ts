@@ -115,6 +115,7 @@ async function pushOne(admin: SupabaseClient, token: string, t: TaskRow): Promis
   };
   const eventId = t.gcal_event_id || blockEventId(t.id);
 
+  let adoptedTime = false;
   const { data: proj } = await admin.from("events").select("google_etag").eq("google_event_id", eventId).maybeSingle();
   const etag = proj?.google_etag as string | undefined;
 
@@ -125,34 +126,28 @@ async function pushOne(admin: SupabaseClient, token: string, t: TaskRow): Promis
   });
 
   if (res.status === 412) {
-    // V Google sa udalosť medzitým zmenila — novšia zmena vyhráva.
+    // V Google sa udalosť medzitým zmenila. Pravidlo 5.1: pri ČASE bloku
+    // vyhráva novšia zmena. Ak je novší Google, prevezmeme jeho čas do úlohy;
+    // ostatné polia (názov s „✓ “, farba, značka) pošleme tak či tak.
     const cur = await gfetch(token, `${CAL}/${encodeURIComponent(eventId)}`);
     const googleNewer =
       cur.res.ok && cur.body?.updated && t.plan_updated_at &&
       new Date(cur.body.updated).getTime() > new Date(t.plan_updated_at).getTime();
+    let patchBody: Record<string, unknown> = body;
     if (googleNewer && cur.body?.start?.dateTime && cur.body?.end?.dateTime) {
       const g = spanFromGoogle(cur.body.start, cur.body.end);
       if (!g.allDay) {
         await admin
           .from("tasks")
-          .update({
-            plan_start_at: g.startAt,
-            plan_end_at: g.endAt,
-            plan_updated_at: cur.body.updated,
-            gcal_event_id: eventId,
-            gcal_sync_state: "ok",
-            gcal_sync_attempts: 0,
-            gcal_last_error: null,
-            gcal_synced_at: new Date().toISOString(),
-          })
+          .update({ plan_start_at: g.startAt, plan_end_at: g.endAt, plan_updated_at: cur.body.updated })
           .eq("id", t.id);
-        await admin.from("events").upsert(eventToProjectionRow(cur.body, t.id, t.project_id), { onConflict: "google_event_id" });
-        return "adopted";
+        patchBody = { ...body, start: { dateTime: g.startAt }, end: { dateTime: g.endAt } };
+        adoptedTime = true;
       }
     }
     ({ res, body: resBody } = await gfetch(token, `${CAL}/${encodeURIComponent(eventId)}`, {
       method: "PATCH",
-      body: JSON.stringify(body),
+      body: JSON.stringify(patchBody),
     }));
   }
 
@@ -182,7 +177,7 @@ async function pushOne(admin: SupabaseClient, token: string, t: TaskRow): Promis
     })
     .eq("id", t.id);
   await admin.from("events").upsert(eventToProjectionRow(resBody, t.id, t.project_id), { onConflict: "google_event_id" });
-  return "ok";
+  return adoptedTime ? "adopted" : "ok";
 }
 
 export async function pushPendingBlocks(
