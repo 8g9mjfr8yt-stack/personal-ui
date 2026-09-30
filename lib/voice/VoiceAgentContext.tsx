@@ -153,6 +153,8 @@ export function VoiceAgentProvider({
   // práve začal novú odpoveď (odozva = koniec reči → prvý zvuk agenta).
   const lastSpeechAtRef = useRef<number>(0);
   const agentTurnActiveRef = useRef<boolean>(false);
+  // či agent v aktuálnom ťahu volal nástroj (odozva sa meria zvlášť)
+  const toolInTurnRef = useRef<boolean>(false);
 
   async function handleFunctionCalls(functionCalls: any[]) {
     // Ak Gemini Live doručí ten istý tool-call opakovane (napr. po
@@ -244,7 +246,9 @@ export function VoiceAgentProvider({
                   if (lastSpeechAtRef.current > 0) {
                     recordPerf(
                       "hlas",
-                      "odozva (koniec reči → prvý zvuk)",
+                      toolInTurnRef.current
+                        ? "odozva s nástrojom (koniec reči → prvý zvuk)"
+                        : "odozva bez nástroja (koniec reči → prvý zvuk)",
                       performance.now() - lastSpeechAtRef.current
                     );
                   }
@@ -255,10 +259,16 @@ export function VoiceAgentProvider({
           }
           if (content?.turnComplete || content?.interrupted) {
             agentTurnActiveRef.current = false;
+            toolInTurnRef.current = false;
           }
 
           const toolCall = message?.toolCall;
           if (toolCall?.functionCalls?.length) {
+            // prvé volanie nástroja v ťahu: koľko trvalo modelu rozhodnúť sa
+            if (!toolInTurnRef.current && !agentTurnActiveRef.current && lastSpeechAtRef.current > 0) {
+              recordPerf("hlas", "odozva: koniec reči → volanie nástroja", performance.now() - lastSpeechAtRef.current);
+            }
+            toolInTurnRef.current = true;
             handleFunctionCalls(toolCall.functionCalls);
           }
 
@@ -319,6 +329,28 @@ export function VoiceAgentProvider({
     const perfStart = performance.now();
     lastSpeechAtRef.current = 0;
     agentTurnActiveRef.current = false;
+    toolInTurnRef.current = false;
+
+    // Mikrofón a zvukové kontexty sa spúšťajú HNEĎ (ešte v rámci kliknutia —
+    // iOS to vyžaduje) a súbežne so získaním tokenu a pripojením ku Gemini.
+    // Predtým išli tri kroky za sebou (merania: 760 + 1024 + 915 ms).
+    let micReadyAt = 0;
+    const micPromise = navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      if (manualStopRef.current) {
+        // rozhovor medzitým skončil (chyba/stop) — mikrofón hneď uvoľniť
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error("Rozhovor bol ukončený.");
+      }
+      micStreamRef.current = stream;
+      micReadyAt = performance.now();
+      return stream;
+    });
+    micPromise.catch(() => {}); // chyba sa spracuje nižšie pri await
+    outputCtxRef.current = new AudioContext({ sampleRate: 24000 });
+    nextPlayTimeRef.current = 0;
+    const inputCtx = new AudioContext();
+    inputCtxRef.current = inputCtx;
+
     try {
       const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
       if (!tokenRes.ok) {
@@ -337,24 +369,19 @@ export function VoiceAgentProvider({
 
       aiClientRef.current = new GoogleGenAI({ apiKey: token });
 
-      outputCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      nextPlayTimeRef.current = 0;
-
       await openSession(false);
       const perfSession = performance.now();
       recordPerf("hlas", "štart: spojenie s Gemini", perfSession - perfToken);
 
-      // Mikrofón
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-
-      const inputCtx = new AudioContext();
-      inputCtxRef.current = inputCtx;
+      // Mikrofón (spustený súbežne na začiatku)
+      const stream = await micPromise;
+      if (inputCtx.state === "suspended") await inputCtx.resume().catch(() => {});
+      if (outputCtxRef.current?.state === "suspended") await outputCtxRef.current.resume().catch(() => {});
       const sourceNode = inputCtx.createMediaStreamSource(stream);
 
       // ScriptProcessorNode je zastaraný, ale pre prvú funkčnú verziu je
       // najjednoduchší (bez samostatného AudioWorklet súboru).
-      recordPerf("hlas", "štart: mikrofón", performance.now() - perfSession);
+      recordPerf("hlas", "štart: mikrofón (súbežne, od kliku)", micReadyAt - perfStart);
       recordPerf("hlas", "štart: spolu (klik → pripravené)", performance.now() - perfStart);
 
       const bufferSize = 4096;
