@@ -72,6 +72,7 @@ export default function TaskRow({
   onAssignProject,
   trailingAction,
   expandedDetail,
+  projectBelow,
 }: {
   title: string;
   meta?: string | null;
@@ -100,6 +101,8 @@ export default function TaskRow({
   trailingAction?: React.ReactNode;
   // text zobrazený iba po rozbalení (napr. termín)
   expandedDetail?: string | null;
+  // pilulka projektu až po rozbalení, pod deliacou čiarou (pool)
+  projectBelow?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasSubtasks = subtasks.length > 0;
@@ -235,7 +238,7 @@ export default function TaskRow({
             >
               {title}
             </span>
-            {projectLabel && (
+            {projectLabel && !projectBelow && (
               <span
                 className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
                 style={{ background: softBg(projectColor), color: softText(projectColor) }}
@@ -305,6 +308,14 @@ export default function TaskRow({
             <div className="absolute right-[18px] top-2">{menuButton("")}</div>
           )}
           {compactMeta && menuPopup("right-3 top-9")}
+          {projectLabel && projectBelow && (
+            <span
+              className="self-start rounded-full px-2 py-0.5 text-[11px]"
+              style={{ background: softBg(projectColor), color: softText(projectColor) }}
+            >
+              {projectLabel}
+            </span>
+          )}
           {expandedDetail && <span className="pr-8 text-xs text-da-meta">{expandedDetail}</span>}
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5">

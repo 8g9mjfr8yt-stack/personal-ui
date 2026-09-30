@@ -130,7 +130,12 @@ export function useTaskUi({
     }
   }
 
-  function renderTask(t: TaskV2, opts: { faded?: boolean; extra?: string | null } = {}) {
+  // opts.pool: riadok v poole — „+“ namiesto „−“/šípky, projekt a detail
+  // (plán, termín) až po rozbalení.
+  function renderTask(
+    t: TaskV2,
+    opts: { faded?: boolean; extra?: string | null; pool?: { label: string; onPlan: () => void; detail?: string | null } } = {}
+  ) {
     const subs = subtasksByParent[t.id] || [];
     const project = projectFor(t.project_id);
     const dl = deadlineLabel(t);
@@ -167,10 +172,15 @@ export function useTaskUi({
         onAddSubtask={() => addSubtask(t)}
         onEdit={() => openEdit(t)}
         onDelete={() => remove(t)}
-        onUnassign={!t.parent_task_id && planMode(t) !== "anytime" ? () => unplan(t) : undefined}
-        expandedDetail={dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null}
+        onUnassign={!opts.pool && !t.parent_task_id && planMode(t) !== "anytime" ? () => unplan(t) : undefined}
+        projectBelow={!!opts.pool}
+        expandedDetail={
+          [opts.pool?.detail || null, dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null].filter(Boolean).join(" · ") || null
+        }
         trailingAction={
-          unplanButton && !opts.faded && !isTaskDone(t) && !t.parent_task_id && planMode(t) !== "anytime" ? (
+          opts.pool ? (
+            <CircleIconButton icon="plus" label={opts.pool.label} disabled={busyId === t.id} onClick={opts.pool.onPlan} />
+          ) : unplanButton && !opts.faded && !isTaskDone(t) && !t.parent_task_id && planMode(t) !== "anytime" ? (
             <CircleIconButton icon="minus" label="Odobrať z dňa" disabled={busyId === t.id} onClick={() => unplan(t)} />
           ) : undefined
         }

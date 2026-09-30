@@ -11,16 +11,14 @@ import { createClient } from "@/lib/supabase/client";
 import { recordPerf } from "@/lib/perf";
 import { addDays, zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
 import { planMode, plannedDays } from "@/lib/model/taskPlan";
-import { deadlineLabel, shortDate } from "@/lib/model/labels";
+import { shortDate } from "@/lib/model/labels";
 import { getEventsInRange, type EventRow } from "@/lib/supabase/events";
 import { getTasksForRange, getPool, planTaskToDay, type TaskV2 } from "@/lib/supabase/tasksV2";
 import type { PoolSection } from "@/lib/model/taskPlan";
 import { getSubtasksFor } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
 import { useScrollRestore } from "@/lib/usePersistedState";
-import { softBg, softText } from "@/lib/colorUtils";
 import DoneDock from "@/components/ui/DoneDock";
-import CircleIconButton from "@/components/ui/CircleIconButton";
 import DayView, { eventsOnDay, tasksOnDay } from "@/components/DayView";
 import { useTaskUi, type UiProject } from "@/components/useTaskUi";
 
@@ -50,7 +48,6 @@ export default function CalendarPage() {
   const [tasks, setTasks] = useState<TaskV2[] | null>(null);
   const [pool, setPool] = useState<Record<PoolSection, TaskV2[]> | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
-  const [poolRowOpen, setPoolRowOpen] = useState<Record<string, boolean>>({});
   const [projects, setProjects] = useState<UiProject[]>([]);
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, TaskV2[]>>({});
   const [expanded, setExpandedState] = useState<Record<string, boolean>>({});
@@ -80,7 +77,8 @@ export default function CalendarPage() {
       setTasks(ts);
       setPool(pl);
       setProjects(pr);
-      const subs = (await getSubtasksFor(supabase, ts.map((t) => t.id))) as TaskV2[];
+      const poolIds = (Object.values(pl) as TaskV2[][]).flat().map((t) => t.id);
+      const subs = (await getSubtasksFor(supabase, [...ts.map((t) => t.id), ...poolIds])) as TaskV2[];
       const grouped: Record<string, TaskV2[]> = {};
       for (const s of subs) (grouped[s.parent_task_id as string] ||= []).push(s);
       setSubtasksByParent(grouped);
@@ -260,59 +258,11 @@ export default function CalendarPage() {
                     {s.label} ({pool[s.key].length})
                   </div>
                   <div className="flex flex-col gap-2">
-                    {pool[s.key].map((t) => {
-                      const project = projects.find((p) => p.id === t.project_id);
-                      const rowOpen = !!poolRowOpen[t.id];
-                      const meta = poolMeta(t, s.key);
-                      return (
-                        <div
-                          key={t.id}
-                          className={`flex flex-col gap-2 rounded-2xl border border-dashed px-3.5 py-2.5 ${
-                            s.danger ? "border-da-danger/50" : "border-da-border"
-                          }`}
-                        >
-                          <div className="flex w-full items-center gap-2">
-                            {/* div namiesto <button>: Safari nedovolí <button> zúžiť pod šírku
-                                textu, dlhý názov potom vytlačil tlačidlo „Na [deň]“ mimo pool */}
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => setPoolRowOpen((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
-                              className="flex min-w-0 flex-1 basis-0 cursor-pointer flex-col overflow-hidden text-left"
-                            >
-                              <span className="truncate text-sm font-medium text-da-text">{t.title}</span>
-                              {meta && <span className={`truncate text-xs ${s.danger ? "text-da-danger" : "text-da-meta"}`}>{meta}</span>}
-                            </div>
-                            <CircleIconButton icon="plus" label={`Na ${sd}. ${sm}.`} disabled={ui.busyId === t.id} onClick={() => planToSelected(t)} />
-                          </div>
-                          {rowOpen && deadlineLabel(t) && (
-                            <div className={`text-xs ${s.danger ? "text-da-danger" : "text-da-meta"}`}>{deadlineLabel(t)!.text}</div>
-                          )}
-                          {rowOpen && (
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-da-border/60 pt-2">
-                              {project ? (
-                                <span
-                                  className="rounded-full px-2 py-0.5 text-[11px]"
-                                  style={{ background: softBg(project.accent_color), color: softText(project.accent_color) }}
-                                >
-                                  {project.name}
-                                </span>
-                              ) : (
-                                <span />
-                              )}
-                              <div className="flex gap-2">
-                                <button type="button" onClick={() => ui.openEdit(t)} className="rounded-full px-2.5 py-1 text-xs font-medium text-da-text">
-                                  Upraviť
-                                </button>
-                                <button type="button" onClick={() => ui.remove(t)} className="rounded-full px-2.5 py-1 text-xs font-medium text-da-danger">
-                                  Vymazať
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {pool[s.key].map((t) =>
+                      ui.renderTask(t, {
+                        pool: { label: `Na ${sd}. ${sm}.`, onPlan: () => planToSelected(t), detail: poolMeta(t, s.key) || null },
+                      })
+                    )}
                   </div>
                 </div>
               ))}
