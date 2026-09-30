@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:time": "node --experimental-strip-types --test tests/time.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
