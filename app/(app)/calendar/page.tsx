@@ -20,6 +20,7 @@ import { getProjects } from "@/lib/supabase/projects";
 import { useScrollRestore } from "@/lib/usePersistedState";
 import { softBg, softText } from "@/lib/colorUtils";
 import DoneDock from "@/components/ui/DoneDock";
+import CircleIconButton from "@/components/ui/CircleIconButton";
 import DayView, { eventsOnDay, tasksOnDay } from "@/components/DayView";
 import { useTaskUi, type UiProject } from "@/components/useTaskUi";
 
@@ -124,6 +125,7 @@ export default function CalendarPage() {
     setExpanded: (fn) => setExpandedState(fn),
     reload,
     setError,
+    unplanButton: true,
   });
 
   function planToSelected(t: TaskV2) {
@@ -135,27 +137,6 @@ export default function CalendarPage() {
       return next;
     });
     ui.run(t.id, () => planTaskToDay(createClient(), t, selectedDay).then(() => reload()), "Nepodarilo sa naplánovať úlohu.");
-  }
-
-  // Úloha v zobrazení dňa + malé „−“ = odobrať z dňa → späť do poolu.
-  function renderDayTask(t: TaskV2, opts?: { faded?: boolean; extra?: string | null }) {
-    const removable = !opts?.faded && !t.completed_at && planMode(t) !== "anytime";
-    if (!removable) return ui.renderTask(t, opts);
-    return (
-      <div key={t.id} className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">{ui.renderTask(t, opts)}</div>
-        <button
-          type="button"
-          aria-label={`Odobrať z dňa: ${t.title}`}
-          title="Odobrať z dňa (späť do poolu)"
-          onClick={() => ui.unplan(t)}
-          disabled={ui.busyId === t.id}
-          className="mt-4 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-da-chip-bg text-sm font-bold leading-none text-da-chip-text disabled:opacity-50"
-        >
-          −
-        </button>
-      </div>
-    );
   }
 
   function poolMeta(t: TaskV2, section: PoolSection): string {
@@ -240,7 +221,7 @@ export default function CalendarPage() {
             events={events}
             tasks={tasks}
             now={now}
-            renderTask={renderDayTask}
+            renderTask={ui.renderTask}
             onOpenEvent={ui.setOpenEvent}
             emptyText="Na tento deň nemáš naplánované úlohy."
           />
@@ -302,16 +283,7 @@ export default function CalendarPage() {
                               <span className="truncate text-sm font-medium text-da-text">{t.title}</span>
                               {meta && <span className={`truncate text-xs ${s.danger ? "text-da-danger" : "text-da-meta"}`}>{meta}</span>}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => planToSelected(t)}
-                              disabled={ui.busyId === t.id}
-                              aria-label={`Naplánovať na ${sd}. ${sm}.`}
-                              title={`Na ${sd}. ${sm}.`}
-                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-da-accent text-lg font-semibold leading-none text-da-on-accent shadow-sm disabled:opacity-50"
-                            >
-                              +
-                            </button>
+                            <CircleIconButton icon="plus" label={`Na ${sd}. ${sm}.`} disabled={ui.busyId === t.id} onClick={() => planToSelected(t)} />
                           </div>
                           {rowOpen && deadlineLabel(t) && (
                             <div className={`text-xs ${s.danger ? "text-da-danger" : "text-da-meta"}`}>{deadlineLabel(t)!.text}</div>

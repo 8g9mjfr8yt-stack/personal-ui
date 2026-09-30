@@ -12,6 +12,7 @@ import { timeRangeLabel, deadlineLabel, shortDate } from "@/lib/model/labels";
 import { setEventProject, type EventRow } from "@/lib/supabase/events";
 import { createTaskV2, updateTaskV2, setTaskDone, deleteTaskV2, type TaskV2, type TaskV2Input } from "@/lib/supabase/tasksV2";
 import TaskRow from "@/components/ui/TaskRow";
+import CircleIconButton from "@/components/ui/CircleIconButton";
 import EventSheet from "@/components/ui/EventSheet";
 import TaskEditModalV2 from "@/components/ui/TaskEditModalV2";
 import { isTaskDone } from "@/components/DayView";
@@ -29,6 +30,7 @@ export function useTaskUi({
   setExpanded,
   reload,
   setError,
+  unplanButton = false,
 }: {
   day: string;
   projects: UiProject[];
@@ -39,6 +41,8 @@ export function useTaskUi({
   setExpanded: (fn: (prev: Record<string, boolean>) => Record<string, boolean>) => void;
   reload: () => void;
   setError: (msg: string | null) => void;
+  // Kalendár: „−“ namiesto šípky = odobrať z dňa
+  unplanButton?: boolean;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ task: Partial<TaskV2> | null } | null>(null);
@@ -134,7 +138,6 @@ export function useTaskUi({
       planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
       opts.extra,
       t.estimated_minutes ? `~${t.estimated_minutes} min` : null,
-      dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null,
       t.gcal_sync_state === "error" ? "⚠ nesynchronizované s Google" : null,
     ].filter(Boolean);
     return (
@@ -165,6 +168,12 @@ export function useTaskUi({
         onEdit={() => openEdit(t)}
         onDelete={() => remove(t)}
         onUnassign={!t.parent_task_id && planMode(t) !== "anytime" ? () => unplan(t) : undefined}
+        expandedDetail={dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null}
+        trailingAction={
+          unplanButton && !opts.faded && !isTaskDone(t) && !t.parent_task_id && planMode(t) !== "anytime" ? (
+            <CircleIconButton icon="minus" label="Odobrať z dňa" disabled={busyId === t.id} onClick={() => unplan(t)} />
+          ) : undefined
+        }
         projects={projects}
         currentProjectId={t.project_id}
         onAssignProject={(pid) => run(t.id, () => updateTaskV2(createClient(), t.id, { project_id: pid }), "Nepodarilo sa priradiť projekt.")}

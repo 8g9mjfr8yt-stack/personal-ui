@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type React from "react";
 import { accentColor, softBg, softText } from "@/lib/colorUtils";
 import ProgressRing from "@/components/ui/ProgressRing";
 import { priorityDisplay } from "@/lib/taskSort";
@@ -69,6 +70,8 @@ export default function TaskRow({
   projects,
   currentProjectId,
   onAssignProject,
+  trailingAction,
+  expandedDetail,
 }: {
   title: string;
   meta?: string | null;
@@ -93,6 +96,10 @@ export default function TaskRow({
   projects?: TaskRowProject[];
   currentProjectId?: string | null;
   onAssignProject?: (projectId: string | null) => void;
+  // nahradí šípku na rozbalenie (rozbaľuje sa potom klikom na názov)
+  trailingAction?: React.ReactNode;
+  // text zobrazený iba po rozbalení (napr. termín)
+  expandedDetail?: string | null;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasSubtasks = subtasks.length > 0;
@@ -191,6 +198,7 @@ export default function TaskRow({
         )}
 
         <div className="flex shrink-0 flex-col items-center gap-1.5">
+          {trailingAction ?? (
           <button
             type="button"
             aria-label={expanded ? "Zbaliť" : "Rozbaliť"}
@@ -211,6 +219,7 @@ export default function TaskRow({
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </button>
+          )}
           {compactMeta && menuButton("")}
         </div>
       </div>
@@ -287,6 +296,7 @@ export default function TaskRow({
 
       {expanded && (
         <div className="flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[46px]">
+          {expandedDetail && <span className="text-xs text-da-meta">{expandedDetail}</span>}
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5">
               <button
