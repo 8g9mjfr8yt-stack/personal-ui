@@ -62,6 +62,9 @@ select
   null, null,
   case when c.rule = 'google_blok' then c.google_event_id end,
   case
+    -- budúce nehotové bloky sa pri prevode znova pošlú do Google, aby dostali
+    -- oranžovú farbu a značku da_task_id (bez nej ich appka nevie zmazať)
+    when c.rule = 'google_blok' and c.completed_at is null and c.scheduled_time > now() then 'pending'
     when c.rule = 'google_blok' then 'ok'
     when c.rule = 'blok' and c.completed_at is null and c.scheduled_time > now() then 'pending'
     else 'none'  -- hotové alebo minulé bloky bez Google sa do kalendára dodatočne neposielajú

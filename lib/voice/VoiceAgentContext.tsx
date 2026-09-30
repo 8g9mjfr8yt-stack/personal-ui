@@ -10,88 +10,29 @@ import {
 } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { createClient } from "@/lib/supabase/client";
-import {
-  TASK_TOOLS,
-  TASK_TOOLS_SYSTEM_INSTRUCTION,
-  TASK_TOOL_NAMES,
-  runTaskTool,
-} from "@/lib/gemini/taskTools";
-import {
-  MEMORY_TOOLS,
-  MEMORY_SYSTEM_INSTRUCTION,
-  MEMORY_TOOL_NAMES,
-  runMemoryTool,
-} from "@/lib/gemini/memoryTools";
-import {
-  NOTE_TOOLS,
-  NOTE_TOOLS_SYSTEM_INSTRUCTION,
-  NOTE_TOOL_NAMES,
-  runNoteTool,
-} from "@/lib/gemini/noteTools";
-import {
-  PROJECT_TOOLS,
-  PROJECT_TOOLS_SYSTEM_INSTRUCTION,
-  PROJECT_TOOL_NAMES,
-  runProjectTool,
-} from "@/lib/gemini/projectTools";
-import {
-  GOAL_TOOLS,
-  GOAL_TOOLS_SYSTEM_INSTRUCTION,
-  GOAL_TOOL_NAMES,
-  runGoalTool,
-} from "@/lib/gemini/goalTools";
-import {
-  INSPIRATION_TOOLS,
-  INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
-  INSPIRATION_TOOL_NAMES,
-  runInspirationTool,
-} from "@/lib/gemini/inspirationTools";
-import {
-  INBOX_TOOLS,
-  INBOX_TOOLS_SYSTEM_INSTRUCTION,
-  INBOX_TOOL_NAMES,
-  runInboxTool,
-} from "@/lib/gemini/inboxTools";
-import {
-  DAILY_LOG_TOOLS,
-  DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
-  DAILY_LOG_TOOL_NAMES,
-  runDailyLogTool,
-} from "@/lib/gemini/dailyLogTools";
-import {
-  CALENDAR_TOOLS,
-  CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
-  CALENDAR_TOOL_NAMES,
-  runCalendarTool,
-} from "@/lib/gemini/calendarTools";
+import { ALL_TOOLS, buildSystemInstruction } from "@/lib/gemini/allTools";
+import { findToolRunner } from "@/lib/voice/toolRunners";
 import { nowInfo, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
 import { recordPerf } from "@/lib/perf";
 
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
 
-// Dispatch tabuľka: mená nástrojov → funkcia, ktorá ich vykoná.
-const TOOL_RUNNERS: Array<{
-  names: string[];
-  run: (
-    supabase: any,
-    name: string,
-    args: Record<string, any>
-  ) => Promise<{ result?: unknown; error?: string }>;
-}> = [
-  { names: TASK_TOOL_NAMES, run: runTaskTool },
-  { names: MEMORY_TOOL_NAMES, run: runMemoryTool },
-  { names: NOTE_TOOL_NAMES, run: runNoteTool },
-  { names: PROJECT_TOOL_NAMES, run: runProjectTool },
-  { names: GOAL_TOOL_NAMES, run: runGoalTool },
-  { names: INSPIRATION_TOOL_NAMES, run: runInspirationTool },
-  { names: INBOX_TOOL_NAMES, run: runInboxTool },
-  { names: DAILY_LOG_TOOL_NAMES, run: runDailyLogTool },
-  { names: CALENDAR_TOOL_NAMES, run: runCalendarTool },
-];
+// Token vopred (2026-09-30, merania: token ~0,5–0,6 s pri každom štarte):
+// token sa vyžiada už keď je appka otvorená a hlas nebeží, a obnovuje sa
+// každých ~40 s. Google ho dovolí použiť na spustenie session iba do 60 s
+// od vytvorenia (newSessionExpireTime), preto starší ako 45 s sa zahodí.
+type TokenData = { token: string; timeContext?: string; timeZone?: string };
+const TOKEN_MAX_AGE_MS = 45_000;
+const TOKEN_REFRESH_MS = 40_000;
 
-function findToolRunner(name: string) {
-  return TOOL_RUNNERS.find((r) => r.names.includes(name))?.run;
+async function fetchToken(): Promise<TokenData> {
+  const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
+  if (!tokenRes.ok) {
+    const body = await tokenRes.json().catch(() => ({}) as any);
+    throw new Error(body.error || "Nepodarilo sa získať token zo servera");
+  }
+  return (await tokenRes.json()) as TokenData;
 }
 
 export type VoiceStatus = "idle" | "connecting" | "live" | "reconnecting" | "error";
@@ -229,6 +170,8 @@ export function VoiceAgentProvider({
   // práve začal novú odpoveď (odozva = koniec reči → prvý zvuk agenta).
   const lastSpeechAtRef = useRef<number>(0);
   const agentTurnActiveRef = useRef<boolean>(false);
+  // či agent v aktuálnom ťahu volal nástroj (odozva sa meria zvlášť)
+  const toolInTurnRef = useRef<boolean>(false);
 
   async function handleFunctionCalls(functionCalls: any[]) {
     // Ak Gemini Live doručí ten istý tool-call opakovane (napr. po
@@ -295,34 +238,10 @@ export function VoiceAgentProvider({
         responseModalities: [Modality.AUDIO],
         // Musí byť identické so zoznamom zamknutým v /api/gemini-token
         // route.ts (server-side liveConnectConstraints.config).
-        tools: [
-          ...TASK_TOOLS,
-          ...MEMORY_TOOLS,
-          ...NOTE_TOOLS,
-          ...PROJECT_TOOLS,
-          ...GOAL_TOOLS,
-          ...INSPIRATION_TOOLS,
-          ...INBOX_TOOLS,
-          ...DAILY_LOG_TOOLS,
-          ...CALENDAR_TOOLS,
-        ],
+        // v2.2 — spoločný zoznam so serverom (lib/gemini/allTools.ts).
+        tools: ALL_TOOLS,
         systemInstruction: {
-          parts: [
-            {
-              text: [
-                ...(timeContextRef.current ? [timeContextRef.current] : []),
-                TASK_TOOLS_SYSTEM_INSTRUCTION,
-                MEMORY_SYSTEM_INSTRUCTION,
-                NOTE_TOOLS_SYSTEM_INSTRUCTION,
-                PROJECT_TOOLS_SYSTEM_INSTRUCTION,
-                GOAL_TOOLS_SYSTEM_INSTRUCTION,
-                INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
-                INBOX_TOOLS_SYSTEM_INSTRUCTION,
-                DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
-                CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
-              ].join("\n\n"),
-            },
-          ],
+          parts: [{ text: buildSystemInstruction(timeContextRef.current) }],
         },
         sessionResumption: resumptionHandleRef.current
           ? { handle: resumptionHandleRef.current }
@@ -344,7 +263,9 @@ export function VoiceAgentProvider({
                   if (lastSpeechAtRef.current > 0) {
                     recordPerf(
                       "hlas",
-                      "odozva (koniec reči → prvý zvuk)",
+                      toolInTurnRef.current
+                        ? "odozva s nástrojom (koniec reči → prvý zvuk)"
+                        : "odozva bez nástroja (koniec reči → prvý zvuk)",
                       performance.now() - lastSpeechAtRef.current
                     );
                   }
@@ -355,10 +276,16 @@ export function VoiceAgentProvider({
           }
           if (content?.turnComplete || content?.interrupted) {
             agentTurnActiveRef.current = false;
+            toolInTurnRef.current = false;
           }
 
           const toolCall = message?.toolCall;
           if (toolCall?.functionCalls?.length) {
+            // prvé volanie nástroja v ťahu: koľko trvalo modelu rozhodnúť sa
+            if (!toolInTurnRef.current && !agentTurnActiveRef.current && lastSpeechAtRef.current > 0) {
+              recordPerf("hlas", "odozva: koniec reči → volanie nástroja", performance.now() - lastSpeechAtRef.current);
+            }
+            toolInTurnRef.current = true;
             handleFunctionCalls(toolCall.functionCalls);
           }
 
@@ -410,6 +337,48 @@ export function VoiceAgentProvider({
     sessionRef.current = session;
   }
 
+  const prefetchedRef = useRef<{ data: TokenData; at: number } | null>(null);
+  const prefetchingRef = useRef(false);
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
+  const prefetchToken = useCallback(async () => {
+    if (prefetchingRef.current) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (statusRef.current !== "idle" && statusRef.current !== "error") return;
+    const cur = prefetchedRef.current;
+    if (cur && Date.now() - cur.at < TOKEN_REFRESH_MS) return;
+    prefetchingRef.current = true;
+    try {
+      const at = Date.now();
+      const data = await fetchToken();
+      prefetchedRef.current = { data, at };
+    } catch {
+      prefetchedRef.current = null; // nevadí — pri štarte sa vyžiada nový
+    } finally {
+      prefetchingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    prefetchToken();
+    const timer = setInterval(prefetchToken, 10_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") prefetchToken();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [prefetchToken]);
+
+  // Po skončení rozhovoru hneď pripraviť ďalší token (inak by opätovné
+  // spustenie do ~10 s čakalo na nový token — meranie: vopred iba 2 z 5).
+  useEffect(() => {
+    if (status === "idle" || status === "error") prefetchToken();
+  }, [status, prefetchToken]);
+
   async function startConversation() {
     setErrorMsg(null);
     setStatus("connecting");
@@ -419,42 +388,54 @@ export function VoiceAgentProvider({
     const perfStart = performance.now();
     lastSpeechAtRef.current = 0;
     agentTurnActiveRef.current = false;
-    try {
-      const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
-      if (!tokenRes.ok) {
-        const body = await tokenRes.json().catch(() => ({}) as any);
-        throw new Error(body.error || "Nepodarilo sa získať token zo servera");
+    toolInTurnRef.current = false;
+
+    // Mikrofón a zvukové kontexty sa spúšťajú HNEĎ (ešte v rámci kliknutia —
+    // iOS to vyžaduje) a súbežne so získaním tokenu a pripojením ku Gemini.
+    // Predtým išli tri kroky za sebou (merania: 760 + 1024 + 915 ms).
+    let micReadyAt = 0;
+    const micPromise = navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      if (manualStopRef.current) {
+        // rozhovor medzitým skončil (chyba/stop) — mikrofón hneď uvoľniť
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error("Rozhovor bol ukončený.");
       }
-      const { token, timeContext, timeZone } = (await tokenRes.json()) as {
-        token: string;
-        timeContext?: string;
-        timeZone?: string;
-      };
+      micStreamRef.current = stream;
+      micReadyAt = performance.now();
+      return stream;
+    });
+    micPromise.catch(() => {}); // chyba sa spracuje nižšie pri await
+    outputCtxRef.current = new AudioContext({ sampleRate: 24000 });
+    nextPlayTimeRef.current = 0;
+    const inputCtx = new AudioContext();
+    inputCtxRef.current = inputCtx;
+
+    try {
+      // token vopred, ak je dosť čerstvý (použije sa iba raz), inak nový
+      const cached = prefetchedRef.current;
+      prefetchedRef.current = null;
+      const fresh = cached && Date.now() - cached.at < TOKEN_MAX_AGE_MS;
+      const { token, timeContext, timeZone } = fresh ? cached!.data : await fetchToken();
       timeContextRef.current = timeContext || "";
       timeZoneRef.current = timeZone || DEFAULT_TIME_ZONE;
       const perfToken = performance.now();
-      recordPerf("hlas", "štart: token", perfToken - perfStart);
+      recordPerf("hlas", fresh ? "štart: token (vopred)" : "štart: token", perfToken - perfStart);
 
       aiClientRef.current = new GoogleGenAI({ apiKey: token });
-
-      outputCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      nextPlayTimeRef.current = 0;
 
       await openSession(false);
       const perfSession = performance.now();
       recordPerf("hlas", "štart: spojenie s Gemini", perfSession - perfToken);
 
-      // Mikrofón
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-
-      const inputCtx = new AudioContext();
-      inputCtxRef.current = inputCtx;
+      // Mikrofón (spustený súbežne na začiatku)
+      const stream = await micPromise;
+      if (inputCtx.state === "suspended") await inputCtx.resume().catch(() => {});
+      if (outputCtxRef.current?.state === "suspended") await outputCtxRef.current.resume().catch(() => {});
       const sourceNode = inputCtx.createMediaStreamSource(stream);
 
       // ScriptProcessorNode je zastaraný, ale pre prvú funkčnú verziu je
       // najjednoduchší (bez samostatného AudioWorklet súboru).
-      recordPerf("hlas", "štart: mikrofón", performance.now() - perfSession);
+      recordPerf("hlas", "štart: mikrofón (súbežne, od kliku)", micReadyAt - perfStart);
       recordPerf("hlas", "štart: spolu (klik → pripravené)", performance.now() - perfStart);
 
       const bufferSize = 4096;

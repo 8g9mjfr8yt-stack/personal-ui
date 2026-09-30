@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureWatchChannel, runIncrementalSync } from "@/lib/server/googleCalendarSync";
+import { ensureWatchChannel } from "@/lib/server/googleCalendarSync";
 import { refreshCalendarProjection } from "@/lib/server/calendarProjection";
 
 export const maxDuration = 60;
@@ -8,8 +8,8 @@ export const maxDuration = 60;
 // Denný Vercel Cron (pozri vercel.json) — dve úlohy:
 // 1. Obnoví Google Calendar "watch" kanál, ak mu čoskoro (do 48h) vyprší
 //    platnosť, alebo ešte vôbec neexistuje (prvé spustenie po nasadení).
-// 2. Záložná sieť: spraví aj bežný sync prechod, pre prípad, že by nejaká
-//    webhook notifikácia cestou zapadla (Google negarantuje 100% doručenie).
+// 2. Záložná sieť: obnoví projekciu `events` (posun okna + zapadnuté
+//    notifikácie). Stará synchronizácia do tasks je od v2.2 vypnutá.
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
   if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -25,14 +25,7 @@ export async function GET(request: Request) {
     console.error("renew-calendar-watch: obnova kanála zlyhala:", err);
   }
 
-  let sync: Awaited<ReturnType<typeof runIncrementalSync>> | null = null;
-  try {
-    sync = await runIncrementalSync(admin);
-  } catch (err) {
-    console.error("renew-calendar-watch: sync zlyhal:", err);
-  }
-
-  // Fáza 3 prestavby — denný posun okna projekcie `events` (tieňový režim).
+  // denný posun okna projekcie `events`
   let projection: unknown = null;
   try {
     projection = await refreshCalendarProjection(admin);
@@ -40,5 +33,5 @@ export async function GET(request: Request) {
     console.error("renew-calendar-watch: tieňová obnova events zlyhala:", err);
   }
 
-  return NextResponse.json({ watch, sync, projection });
+  return NextResponse.json({ watch, projection });
 }

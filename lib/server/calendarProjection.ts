@@ -17,6 +17,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getAccessToken } from "./googleCalendarAdmin";
+import { reconcileTaskBlocks } from "./taskCalendarPush";
 import { addDays, dayBounds, spanFromGoogle, zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
 
 const CALENDAR_ID = "primary";
@@ -30,6 +31,7 @@ export type ProjectionResult = {
   upserted: number;
   deleted: number;
   skippedDelete: boolean;
+  blocks: { adopted: number; unblocked: number };
   ms: number;
 };
 
@@ -122,6 +124,12 @@ export async function refreshCalendarProjection(admin: SupabaseClient): Promise<
     deleted = count || 0;
   }
 
+  // 4) Bloky úloh: posuny v Google → do úlohy, zmazané v Google → úloha bez času.
+  let blocks = { adopted: 0, unblocked: 0 };
+  if (!skippedDelete) {
+    blocks = await reconcileTaskBlocks(admin, items, { timeMin, timeMax });
+  }
+
   await admin.from("calendar_sync_state").upsert({
     id: "primary",
     window_start: windowStart,
@@ -137,6 +145,7 @@ export async function refreshCalendarProjection(admin: SupabaseClient): Promise<
     upserted,
     deleted,
     skippedDelete,
+    blocks,
     ms: Date.now() - started,
   };
 }

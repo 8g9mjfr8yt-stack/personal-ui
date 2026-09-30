@@ -1,24 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getProjects, createProject, updateProject } from "@/lib/supabase/projects";
-import {
-  getAllProjectTasks,
-  getTasks,
-  getSubtasksFor,
-  completeTask,
-  uncompleteTask,
-  createTask,
-  updateTask,
-  deleteTask,
-} from "@/lib/supabase/tasks";
+import { getSubtasksFor } from "@/lib/supabase/tasks";
+import { getOpenTasks, getProjectTasksV2, updateTaskV2, type TaskV2 } from "@/lib/supabase/tasksV2";
+import { getEventsInRange, type EventRow } from "@/lib/supabase/events";
+import { addDays, zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
+import { planMode } from "@/lib/model/taskPlan";
+import { shortDate, timeRangeLabel } from "@/lib/model/labels";
 import ProgressRing from "@/components/ui/ProgressRing";
-import TaskRow from "@/components/ui/TaskRow";
-import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
+import EventCard from "@/components/ui/EventCard";
+import { useTaskUi } from "@/components/useTaskUi";
 import { ACCENT_SWATCHES, accentOrDefault, accentColor } from "@/lib/colorUtils";
-import { sortTasksForDisplay } from "@/lib/taskSort";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
+
+const TZ = DEFAULT_TIME_ZONE;
+// v2.2: úlohy projektu v novom modeli plánu (zoradené podľa plánu),
+// + nadchádzajúce udalosti priradené k projektu (180 dní dopredu).
+function planSortKey(t: TaskV2): string {
+  const mode = planMode(t);
+  if (mode === "block") return t.plan_start_at!;
+  if (mode === "day" || mode === "range") return t.plan_start_date!;
+  return "9999" + (t.due_date || "");
+}
 
 type Project = {
   id: string;
@@ -30,21 +35,7 @@ type Project = {
   accent_color: string | null;
 };
 
-type Task = {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string | null;
-  project_id: string | null;
-  parent_task_id: string | null;
-  due_date: string | null;
-  start_date: string | null;
-  scheduled_time: string | null;
-  scheduled_time_end: string | null;
-  context: string | null;
-  estimated_minutes: number | null;
-};
+type Task = TaskV2;
 
 const GROUP_ORDER: { key: string; label: string }[] = [
   { key: "done", label: "Hotové" },
@@ -205,7 +196,9 @@ export default function ProjectsPage() {
   const [expandedProjects, setExpandedProjects] = usePersistedFlags("da_projects_expanded_projects");
   const [expandedTasks, setExpandedTasks] = usePersistedFlags("da_projects_expanded_tasks");
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [, setBusyId] = useState<string | null>(null);
+  const [eventsByProject, setEventsByProject] = useState<Record<string, EventRow[]>>({});
+  const [, setFlatTasks] = useState<TaskV2[] | null>(null); // pre useTaskUi (optimistické zmeny rieši realtime)
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -215,20 +208,22 @@ export default function ProjectsPage() {
   const [assignPicks, setAssignPicks] = useState<Record<string, string>>({});
   const [assigningProjectId, setAssigningProjectId] = useState<string | null>(null);
 
-  const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
-  const [modalSaving, setModalSaving] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
 
   useScrollRestore("da_scroll_projects", projects !== null);
 
-  async function load() {
+  const load = useCallback(async () => {
     const supabase = createClient();
     try {
-      const [projectData, taskData, allOpenTasks] = await Promise.all([
+      const today = zonedDate(new Date(), TZ);
+      const [projectData, taskData, allOpenTasks, events] = await Promise.all([
         getProjects(supabase) as Promise<Project[]>,
-        getAllProjectTasks(supabase) as Promise<Task[]>,
-        getTasks(supabase) as Promise<Task[]>,
+        getProjectTasksV2(supabase),
+        getOpenTasks(supabase),
+        getEventsInRange(supabase, today, addDays(today, 180), TZ),
       ]);
+      const evGrouped: Record<string, EventRow[]> = {};
+      for (const e of events) if (e.project_id && !e.task_id) (evGrouped[e.project_id] ||= []).push(e);
+      setEventsByProject(evGrouped);
       setProjects(projectData);
       setUnassignedTasks(allOpenTasks.filter((t) => !t.project_id));
 
@@ -252,20 +247,43 @@ export default function ProjectsPage() {
       const e = err as Error;
       setError(e?.message || "Nepodarilo sa načítať projekty.");
     }
-  }
+  }, []);
+
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reload = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => load(), 300);
+  }, [load]);
 
   useEffect(() => {
     load();
     const supabase = createClient();
     const channel = supabase
-      .channel("realtime-projects")
-      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => load())
+      .channel("realtime-projects-v22")
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, reload)
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [load, reload]);
+
+  const ui = useTaskUi({
+    day: zonedDate(new Date(), TZ),
+    projects: (projects || []).map((p) => ({ id: p.id, name: p.name, accent_color: p.accent_color })),
+    subtasksByParent,
+    setTasks: setFlatTasks,
+    setSubtasksByParent,
+    expanded: expandedTasks,
+    setExpanded: setExpandedTasks,
+    reload,
+    setError,
+  });
+
+  function eventDate(e: EventRow): string {
+    return e.all_day ? e.start_date! : zonedDate(e.start_at!, TZ);
+  }
 
   async function handleCreateProject(v: ProjectFormValues) {
     setCreating(true);
@@ -310,84 +328,13 @@ export default function ProjectsPage() {
     }
   }
 
-  async function handleToggleDone(t: Task) {
-    setBusyId(t.id);
-    try {
-      const supabase = createClient();
-      if (t.status === "done") await uncompleteTask(supabase, t.id);
-      else await completeTask(supabase, t.id);
-      await load();
-    } catch (err) {
-      setError((err as Error)?.message || "Nepodarilo sa aktualizovať úlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleToggleSubtask(s: Task) {
-    setBusyId(s.id);
-    try {
-      const supabase = createClient();
-      if (s.status === "done") await uncompleteTask(supabase, s.id);
-      else await completeTask(supabase, s.id);
-      await load();
-    } catch (err) {
-      setError((err as Error)?.message || "Nepodarilo sa aktualizovať podúlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleAddSubtask(parentId: string) {
-    const title = window.prompt("Názov podúlohy:");
-    if (!title || !title.trim()) return;
-    setBusyId(parentId);
-    try {
-      const supabase = createClient();
-      await createTask(supabase, { title: title.trim(), parent_task_id: parentId });
-      setExpandedTasks((prev) => ({ ...prev, [parentId]: true }));
-      await load();
-    } catch (err) {
-      setError((err as Error)?.message || "Nepodarilo sa pridať podúlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleDeleteTask(t: Task) {
-    if (!confirm(`Naozaj natrvalo zmazať úlohu "${t.title}"?`)) return;
-    setBusyId(t.id);
-    try {
-      const supabase = createClient();
-      await deleteTask(supabase, t.id);
-      await load();
-    } catch (err) {
-      setError((err as Error)?.message || "Nepodarilo sa zmazať úlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReassignTask(taskId: string, projectId: string | null) {
-    setBusyId(taskId);
-    try {
-      const supabase = createClient();
-      await updateTask(supabase, { id: taskId, project_id: projectId });
-      await load();
-    } catch (err) {
-      setError((err as Error)?.message || "Nepodarilo sa priradiť projekt.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function handleAssignExisting(projectId: string) {
     const taskId = assignPicks[projectId];
     if (!taskId) return;
     setBusyId(taskId);
     try {
       const supabase = createClient();
-      await updateTask(supabase, { id: taskId, project_id: projectId });
+      await updateTaskV2(supabase, taskId, { project_id: projectId });
       setAssignPicks((prev) => ({ ...prev, [projectId]: "" }));
       setAssigningProjectId(null);
       await load();
@@ -397,51 +344,6 @@ export default function ProjectsPage() {
       setBusyId(null);
     }
   }
-
-  function openCreateTaskFor(projectId: string) {
-    setModalError(null);
-    setModalInitial({ project_id: projectId });
-  }
-
-  function openEditTask(t: Task) {
-    setModalError(null);
-    setModalInitial({
-      id: t.id,
-      title: t.title,
-      description: t.description,
-      priority: t.priority,
-      project_id: t.project_id,
-      due_date: t.due_date,
-      start_date: t.start_date,
-      scheduled_time: t.scheduled_time,
-      scheduled_time_end: t.scheduled_time_end,
-      estimated_minutes: t.estimated_minutes,
-      context: t.context,
-      status: t.status,
-    });
-  }
-
-  async function handleModalSave(values: TaskEditModalValues) {
-    if (!modalInitial) return;
-    setModalSaving(true);
-    setModalError(null);
-    try {
-      const supabase = createClient();
-      if (modalInitial.id) {
-        await updateTask(supabase, { id: modalInitial.id, ...values });
-      } else {
-        await createTask(supabase, values);
-      }
-      setModalInitial(null);
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setModalError(e?.message || "Nepodarilo sa uložiť úlohu.");
-    } finally {
-      setModalSaving(false);
-    }
-  }
-
 
   return (
     <div className="px-5 pt-6">
@@ -574,48 +476,37 @@ export default function ProjectsPage() {
                       <span className="text-xs font-semibold uppercase tracking-wide text-da-muted">
                         {g.label}
                       </span>
-                      {sortTasksForDisplay(groups[g.key]).map((t) => {
-                        const subs = subtasksByParent[t.id] || [];
+                      {groups[g.key]
+                        .slice()
+                        .sort((x, y) => planSortKey(x).localeCompare(planSortKey(y)))
+                        .map((t) => ui.renderTask(t, { showPlan: true, bare: true, hideProject: true }))}
+                    </div>
+                  ))}
+
+                  {(eventsByProject[p.id] || []).length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-da-muted">Udalosti</span>
+                      {(eventsByProject[p.id] || []).map((e) => {
+                        const d = eventDate(e);
                         return (
-                          <TaskRow
-                            key={t.id}
-                            bare
-                            title={t.title}
-                            priority={t.priority}
-                            done={t.status === "done"}
-                            busy={busyId === t.id}
-                            projectColor={p.accent_color}
-                            subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
-                            expanded={!!expandedTasks[t.id]}
-                            onToggleDone={() => handleToggleDone(t)}
-                            onToggleExpand={() =>
-                              setExpandedTasks((prev) => ({ ...prev, [t.id]: !prev[t.id] }))
-                            }
-                            onToggleSubtask={(subId) => {
-                              const sub = subs.find((s) => s.id === subId);
-                              if (sub) handleToggleSubtask(sub);
-                            }}
-                            onDeleteSubtask={(subId) => {
-                              const sub = subs.find((s) => s.id === subId);
-                              if (sub) handleDeleteTask(sub);
-                            }}
-                            onAddSubtask={() => handleAddSubtask(t.id)}
-                            onEdit={() => openEditTask(t)}
-                            onDelete={() => handleDeleteTask(t)}
-                            projects={(projects || []).map((pr) => ({ id: pr.id, name: pr.name }))}
-                            currentProjectId={t.project_id}
-                            onAssignProject={(pid) => handleReassignTask(t.id, pid)}
+                          <EventCard
+                            key={e.id}
+                            title={e.title}
+                            timeLabel={shortDate(d)}
+                            dayLabel={e.all_day ? "celý deň" : timeRangeLabel(e.start_at!, e.end_at!, d)}
+                            location={e.location}
+                            onOpen={() => ui.setOpenEvent(e)}
                           />
                         );
                       })}
                     </div>
-                  ))}
+                  )}
 
                   <div className="flex items-center gap-2 border-t border-da-border/70 pt-3">
                     <button
                       type="button"
                       aria-label="Nová úloha v projekte"
-                      onClick={() => openCreateTaskFor(p.id)}
+                      onClick={() => ui.openCreate({ project_id: p.id })}
                       className="flex h-7 w-7 shrink-0 items-center justify-center"
                       style={{ color: accent }}
                     >
@@ -692,25 +583,7 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      {modalInitial && (
-        <TaskEditModal
-          initial={modalInitial}
-          projects={(projects || []).map((p) => ({ id: p.id, name: p.name }))}
-          saving={modalSaving}
-          error={modalError}
-          onSave={handleModalSave}
-          onClose={() => setModalInitial(null)}
-          onDelete={
-            modalInitial.id
-              ? () => {
-                  const init = modalInitial;
-                  setModalInitial(null);
-                  handleDeleteTask({ id: init.id as string, title: init.title || "" } as Task);
-                }
-              : undefined
-          }
-        />
-      )}
+      {ui.overlays}
     </div>
   );
 }

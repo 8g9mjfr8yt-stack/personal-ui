@@ -121,89 +121,9 @@ výskyt (napr. "v piatok" = najbližší piatok) a pri nejasnosti si over aktuá
 dátum z kontextu rozhovoru namiesto hádania.
 `.trim();
 
-// Zistí, či je hodnota "iba dátum" (celodenná udalosť) alebo dátum a čas.
-function isAllDayValue(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
-
-// 2026-09-27 — obojsmerná synchronizácia s tabuľkou `tasks` (pozri
-// lib/supabase/tasks.ts pre opačný smer, úloha → kalendár). Udalosť
-// vytvorená/upravená/zmazaná hlasom cez nástroje nižšie sa zrkadlí ako
-// úloha, nech sa objaví aj v Dnes/Kalendári appky a v rannom prehľade.
-// Zámerne priamy `.insert()`/`.update()`/`.delete()` na `tasks`, NIE
-// createTask/updateTask/deleteTask z lib/supabase/tasks.ts — tie by sa
-// znova pokúsili zapísať späť do Google Kalendára a spôsobili nekonečnú
-// slučku.
-async function mirrorEventCreateToTask(
-  supabase: SupabaseClient,
-  args: Record<string, any>,
-  eventId: string
-) {
-  try {
-    const allDay = isAllDayValue(args.start_datetime);
-    const startDate = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
-    // Viacdňová udalosť (napr. dovolenka nadiktovaná hlasom "od pondelka
-    // do piatku") — nastavíme aj start_date, nech sa v Kalendári appky
-    // zobrazí na každom dni rozsahu, nie iba prvom (rovnaký princíp ako
-    // eventToTaskFields v lib/server/googleCalendarSync.ts). Google pri
-    // celodenných udalostiach vracia end_datetime EXKLUZÍVNE.
-    const dueDate = args.end_datetime
-      ? allDay
-        ? addDaysISO(args.end_datetime, -1)
-        : args.end_datetime.slice(0, 10)
-      : startDate;
-    await supabase.from("tasks").insert({
-      title: args.summary,
-      description: args.description || null,
-      start_date: startDate,
-      due_date: dueDate,
-      scheduled_time: allDay ? null : localDateTimeToISOString(args.start_datetime),
-      scheduled_time_end:
-        allDay || !args.end_datetime ? null : localDateTimeToISOString(args.end_datetime),
-      google_event_id: eventId,
-    });
-  } catch (err) {
-    console.error("Nepodarilo sa zrkadliť novú Calendar udalosť ako úlohu:", err);
-  }
-}
-
-async function mirrorEventUpdateToTask(supabase: SupabaseClient, args: Record<string, any>) {
-  try {
-    const patch: Record<string, unknown> = {};
-    if (args.summary !== undefined) patch.title = args.summary;
-    if (args.description !== undefined) patch.description = args.description;
-    if (args.start_datetime !== undefined) {
-      const allDay = isAllDayValue(args.start_datetime);
-      const startDate = allDay ? args.start_datetime : args.start_datetime.slice(0, 10);
-      patch.start_date = startDate;
-      patch.due_date = startDate;
-      patch.scheduled_time = allDay ? null : localDateTimeToISOString(args.start_datetime);
-      // end_datetime prišlo v tom istom volaní ako start_datetime — vieme
-      // bezpečne dopočítať due_date pre viacdňový rozsah (allDay-osť je
-      // istá zo start_datetime). Ak prišlo iba end_datetime bez
-      // start_datetime, due_date radšej nemeníme (nevieme spoľahlivo
-      // zistiť, či ide o celodennú udalosť, bez načítania úlohy z DB).
-      if (args.end_datetime !== undefined) {
-        patch.due_date = allDay
-          ? addDaysISO(args.end_datetime, -1)
-          : args.end_datetime.slice(0, 10);
-        patch.scheduled_time_end = allDay ? null : localDateTimeToISOString(args.end_datetime);
-      }
-    }
-    if (Object.keys(patch).length === 0) return;
-    await supabase.from("tasks").update(patch).eq("google_event_id", args.event_id);
-  } catch (err) {
-    console.error("Nepodarilo sa zrkadliť úpravu Calendar udalosti do úlohy:", err);
-  }
-}
-
-async function mirrorEventDeleteToTask(supabase: SupabaseClient, eventId: string) {
-  try {
-    await supabase.from("tasks").delete().eq("google_event_id", eventId);
-  } catch (err) {
-    console.error("Nepodarilo sa zrkadliť zmazanie Calendar udalosti do úlohy:", err);
-  }
-}
+// v2.2 — udalosti sa do appky dostanú cez projekciu `events` (webhook z
+// Google, lib/server/calendarProjection.ts). Staré zrkadlenie udalostí do
+// `tasks` bolo odstránené.
 
 export async function runCalendarTool(
   supabase: SupabaseClient,
@@ -221,19 +141,16 @@ export async function runCalendarTool(
           };
         }
         const event = await createCalendarEvent(args as any);
-        await mirrorEventCreateToTask(supabase, args, event.id as string);
         return { result: event };
       }
       case "update_calendar_event": {
         if (!args.event_id) return { error: "Chýba povinné pole 'event_id'." };
         const event = await updateCalendarEvent(args as any);
-        await mirrorEventUpdateToTask(supabase, args);
         return { result: event };
       }
       case "delete_calendar_event": {
         if (!args.event_id) return { error: "Chýba povinné pole 'event_id'." };
         const result = await deleteCalendarEvent(args.event_id);
-        await mirrorEventDeleteToTask(supabase, args.event_id);
         return { result };
       }
       default:
