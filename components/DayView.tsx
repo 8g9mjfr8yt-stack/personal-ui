@@ -64,18 +64,8 @@ export default function DayView({
     ...dayEvents.filter((e) => !e.all_day).map((e) => ({ kind: "event" as const, start: Date.parse(e.start_at!), e })),
     ...blocks.filter((t) => !isTaskDone(t)).map((t) => ({ kind: "task" as const, start: Date.parse(t.plan_start_at!), t })),
   ].sort((a, b) => a.start - b.start);
-  const isToday = day === zonedDate(new Date(now), TZ);
-  const nowIndex = isToday ? timeline.findIndex((it) => it.start > now) : -2;
   const openDay = dayTasks.filter((t) => !isTaskDone(t));
   const openRange = rangeTasks.filter((t) => !isTaskDone(t));
-
-  const nowLine = (
-    <div className="flex items-center gap-2 py-1 text-[11px] font-semibold text-da-danger">
-      <span className="h-px flex-grow bg-da-danger/60" />
-      teraz {new Date(now).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit", timeZone: TZ })}
-      <span className="h-px flex-grow bg-da-danger/60" />
-    </div>
-  );
 
   return (
     <>
@@ -100,9 +90,8 @@ export default function DayView({
 
       {timeline.length > 0 && (
         <div className="mb-4 flex flex-col gap-2">
-          {timeline.map((it, idx) => (
+          {timeline.map((it) => (
             <div key={it.kind === "event" ? `e-${it.e.id}` : `t-${it.t.id}`} className="flex flex-col gap-2">
-              {idx === nowIndex && nowLine}
               {it.kind === "event" ? (
                 <EventCard
                   title={it.e.title}
@@ -116,7 +105,6 @@ export default function DayView({
               )}
             </div>
           ))}
-          {isToday && nowIndex === -1 && nowLine}
         </div>
       )}
 

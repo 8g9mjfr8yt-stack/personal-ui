@@ -73,6 +73,7 @@ export default function TaskRow({
   trailingAction,
   expandedDetail,
   projectBelow,
+  expandedActions,
 }: {
   title: string;
   meta?: string | null;
@@ -103,6 +104,8 @@ export default function TaskRow({
   expandedDetail?: string | null;
   // pilulka projektu až po rozbalení, pod deliacou čiarou (pool)
   projectBelow?: boolean;
+  // ďalšie akcie po rozbalení (Dnes: Odložiť na zajtra / iný deň)
+  expandedActions?: React.ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasSubtasks = subtasks.length > 0;
@@ -322,6 +325,7 @@ export default function TaskRow({
               {expandedDetail && <span className="text-xs text-da-meta">{expandedDetail}</span>}
             </div>
           )}
+          {expandedActions}
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5">
               <button

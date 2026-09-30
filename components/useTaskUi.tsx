@@ -6,7 +6,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
+import { addDays, zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
 import { planMode } from "@/lib/model/taskPlan";
 import { timeRangeLabel, deadlineLabel, shortDate, planLabel } from "@/lib/model/labels";
 import { setEventProject, type EventRow } from "@/lib/supabase/events";
@@ -137,7 +137,7 @@ export function useTaskUi({
     opts: {
       faded?: boolean;
       extra?: string | null;
-      pool?: { label: string; onPlan: () => void; detail?: string | null };
+      pool?: { label: string; onPlan: () => void; detail?: string | null; onPostpone?: (dateISO: string) => void };
       showPlan?: boolean; // Úlohy/Projekty: plán (deň, rozmedzie, blok) v zbalenom riadku
       bare?: boolean; // Projekty: bez vlastnej karty
       hideProject?: boolean; // Projekty: projekt je zrejmý z karty
@@ -182,6 +182,31 @@ export function useTaskUi({
         onDelete={() => remove(t)}
         onUnassign={!opts.pool && !t.parent_task_id && planMode(t) !== "anytime" ? () => unplan(t) : undefined}
         projectBelow={!!opts.pool}
+        expandedActions={
+          opts.pool?.onPostpone ? (
+            <div className="flex flex-wrap items-center gap-2 pr-8">
+              <span className="text-xs text-da-meta">Odložiť:</span>
+              <button
+                type="button"
+                disabled={busyId === t.id}
+                onClick={() => opts.pool!.onPostpone!(addDays(zonedDate(new Date(), TZ), 1))}
+                className="rounded-full bg-da-chip-bg px-2.5 py-1 text-xs font-medium text-da-chip-text disabled:opacity-50"
+              >
+                na zajtra
+              </button>
+              <label className="relative rounded-full bg-da-chip-bg px-2.5 py-1 text-xs font-medium text-da-chip-text">
+                iný deň…
+                <input
+                  type="date"
+                  aria-label="Odložiť na deň"
+                  min={addDays(zonedDate(new Date(), TZ), 1)}
+                  onChange={(e) => e.target.value && opts.pool!.onPostpone!(e.target.value)}
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                />
+              </label>
+            </div>
+          ) : undefined
+        }
         expandedDetail={
           [opts.pool?.detail || null, dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null].filter(Boolean).join(" · ") || null
         }
