@@ -143,6 +143,78 @@ export default function TaskRow({
       </button>
     );
 
+  const menuPopup = (pos: string) =>
+    menuOpen &&
+    hasMenu && (
+        <>
+          <button
+            type="button"
+            aria-label="Zavrieť menu"
+            onClick={() => setMenuOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div className={`absolute ${pos} z-50 flex w-56 flex-col gap-0.5 rounded-2xl border border-da-border bg-da-card p-1.5 shadow-lg`}>
+            {onAssignProject && projects && (
+              <label className="flex flex-col gap-1 rounded-xl px-2.5 py-1.5 text-xs text-da-meta">
+                Priradiť k projektu
+                <select
+                  value={currentProjectId || ""}
+                  onChange={(e) => {
+                    onAssignProject(e.target.value || null);
+                    setMenuOpen(false);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-lg border border-da-border bg-da-card px-2 py-1 text-sm text-da-text"
+                >
+                  <option value="">— bez projektu —</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {onEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onEdit();
+                }}
+                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-text hover:bg-da-bg"
+              >
+                Upraviť
+              </button>
+            )}
+            {onUnassign && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onUnassign();
+                }}
+                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-text hover:bg-da-bg"
+              >
+                Odobrať z dňa
+              </button>
+            )}
+            {onDelete && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete();
+                }}
+                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-danger hover:bg-da-bg"
+              >
+                Zmazať
+              </button>
+            )}
+          </div>
+        </>
+      );
+
   return (
     <div className={`relative ${wrapperClass}`}>
       <div className={`flex items-center gap-2 px-4 ${faded ? "py-2.5" : "py-3.5"}`}>
@@ -220,83 +292,20 @@ export default function TaskRow({
             </svg>
           </button>
           )}
-          {compactMeta && menuButton("")}
         </div>
       </div>
 
-      {menuOpen && hasMenu && (
-        <>
-          <button
-            type="button"
-            aria-label="Zavrieť menu"
-            onClick={() => setMenuOpen(false)}
-            className="fixed inset-0 z-40 cursor-default"
-          />
-          <div className="absolute right-3 top-[52px] z-50 flex w-56 flex-col gap-0.5 rounded-2xl border border-da-border bg-da-card p-1.5 shadow-lg">
-            {onAssignProject && projects && (
-              <label className="flex flex-col gap-1 rounded-xl px-2.5 py-1.5 text-xs text-da-meta">
-                Priradiť k projektu
-                <select
-                  value={currentProjectId || ""}
-                  onChange={(e) => {
-                    onAssignProject(e.target.value || null);
-                    setMenuOpen(false);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="rounded-lg border border-da-border bg-da-card px-2 py-1 text-sm text-da-text"
-                >
-                  <option value="">— bez projektu —</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {onEdit && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onEdit();
-                }}
-                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-text hover:bg-da-bg"
-              >
-                Upraviť
-              </button>
-            )}
-            {onUnassign && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onUnassign();
-                }}
-                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-text hover:bg-da-bg"
-              >
-                Odobrať z dňa
-              </button>
-            )}
-            {onDelete && (
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onDelete();
-                }}
-                className="rounded-xl px-2.5 py-2 text-left text-sm font-medium text-da-danger hover:bg-da-bg"
-              >
-                Zmazať
-              </button>
-            )}
-          </div>
-        </>
-      )}
+      {!compactMeta && menuPopup("right-3 top-[52px]")}
 
       {expanded && (
-        <div className="flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[46px]">
-          {expandedDetail && <span className="text-xs text-da-meta">{expandedDetail}</span>}
+        <div className="relative flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[46px]">
+          {/* kompaktný režim: „⋮“ až pod deliacou čiarou, zarovnané so stĺpcom
+              šípky/„−“ — horná časť karty sa po rozbalení nemení */}
+          {compactMeta && (
+            <div className="absolute right-[18px] top-2">{menuButton("")}</div>
+          )}
+          {compactMeta && menuPopup("right-3 top-9")}
+          {expandedDetail && <span className="pr-8 text-xs text-da-meta">{expandedDetail}</span>}
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5">
               <button
