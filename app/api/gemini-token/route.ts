@@ -1,32 +1,6 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import { NextResponse } from "next/server";
-import {
-  TASK_TOOLS,
-  TASK_TOOLS_SYSTEM_INSTRUCTION,
-} from "@/lib/gemini/taskTools";
-import {
-  MEMORY_TOOLS,
-  MEMORY_SYSTEM_INSTRUCTION,
-} from "@/lib/gemini/memoryTools";
-import { NOTE_TOOLS, NOTE_TOOLS_SYSTEM_INSTRUCTION } from "@/lib/gemini/noteTools";
-import {
-  PROJECT_TOOLS,
-  PROJECT_TOOLS_SYSTEM_INSTRUCTION,
-} from "@/lib/gemini/projectTools";
-import { GOAL_TOOLS, GOAL_TOOLS_SYSTEM_INSTRUCTION } from "@/lib/gemini/goalTools";
-import {
-  INSPIRATION_TOOLS,
-  INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
-} from "@/lib/gemini/inspirationTools";
-import { INBOX_TOOLS, INBOX_TOOLS_SYSTEM_INSTRUCTION } from "@/lib/gemini/inboxTools";
-import {
-  DAILY_LOG_TOOLS,
-  DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
-} from "@/lib/gemini/dailyLogTools";
-import {
-  CALENDAR_TOOLS,
-  CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
-} from "@/lib/gemini/calendarTools";
+import { ALL_TOOLS, buildSystemInstruction } from "@/lib/gemini/allTools";
 import { buildTimeContextInstruction, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
 
 // Musí byť presne rovnaký model ako v app/(app)/voice/page.tsx.
@@ -79,34 +53,10 @@ export async function POST() {
             // Fáza 3 leftovers (2026-09-14) — zvyšné entity (Notes, Inbox,
             // Projects, Goals, Inspiration, Daily Log) pridané ako fast-path
             // Supabase nástroje rovnakým vzorom ako Tasks/Memory vyššie.
-            tools: [
-              ...TASK_TOOLS,
-              ...MEMORY_TOOLS,
-              ...NOTE_TOOLS,
-              ...PROJECT_TOOLS,
-              ...GOAL_TOOLS,
-              ...INSPIRATION_TOOLS,
-              ...INBOX_TOOLS,
-              ...DAILY_LOG_TOOLS,
-              ...CALENDAR_TOOLS,
-            ],
+            // v2.2 — spoločný zoznam s prehliadačom (lib/gemini/allTools.ts).
+            tools: ALL_TOOLS,
             systemInstruction: {
-              parts: [
-                {
-                  text: [
-                    timeContext,
-                    TASK_TOOLS_SYSTEM_INSTRUCTION,
-                    MEMORY_SYSTEM_INSTRUCTION,
-                    NOTE_TOOLS_SYSTEM_INSTRUCTION,
-                    PROJECT_TOOLS_SYSTEM_INSTRUCTION,
-                    GOAL_TOOLS_SYSTEM_INSTRUCTION,
-                    INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
-                    INBOX_TOOLS_SYSTEM_INSTRUCTION,
-                    DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
-                    CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
-                  ].join("\n\n"),
-                },
-              ],
+              parts: [{ text: buildSystemInstruction(timeContext) }],
             },
             // Fáza 4.3 — umožní klientovi obnoviť tú istú session (rovnaký
             // kontext rozhovoru) po tom, čo Live API po ~10 min zatvorí

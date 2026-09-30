@@ -10,89 +10,13 @@ import {
 } from "react";
 import { GoogleGenAI, Modality } from "@google/genai";
 import { createClient } from "@/lib/supabase/client";
-import {
-  TASK_TOOLS,
-  TASK_TOOLS_SYSTEM_INSTRUCTION,
-  TASK_TOOL_NAMES,
-  runTaskTool,
-} from "@/lib/gemini/taskTools";
-import {
-  MEMORY_TOOLS,
-  MEMORY_SYSTEM_INSTRUCTION,
-  MEMORY_TOOL_NAMES,
-  runMemoryTool,
-} from "@/lib/gemini/memoryTools";
-import {
-  NOTE_TOOLS,
-  NOTE_TOOLS_SYSTEM_INSTRUCTION,
-  NOTE_TOOL_NAMES,
-  runNoteTool,
-} from "@/lib/gemini/noteTools";
-import {
-  PROJECT_TOOLS,
-  PROJECT_TOOLS_SYSTEM_INSTRUCTION,
-  PROJECT_TOOL_NAMES,
-  runProjectTool,
-} from "@/lib/gemini/projectTools";
-import {
-  GOAL_TOOLS,
-  GOAL_TOOLS_SYSTEM_INSTRUCTION,
-  GOAL_TOOL_NAMES,
-  runGoalTool,
-} from "@/lib/gemini/goalTools";
-import {
-  INSPIRATION_TOOLS,
-  INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
-  INSPIRATION_TOOL_NAMES,
-  runInspirationTool,
-} from "@/lib/gemini/inspirationTools";
-import {
-  INBOX_TOOLS,
-  INBOX_TOOLS_SYSTEM_INSTRUCTION,
-  INBOX_TOOL_NAMES,
-  runInboxTool,
-} from "@/lib/gemini/inboxTools";
-import {
-  DAILY_LOG_TOOLS,
-  DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
-  DAILY_LOG_TOOL_NAMES,
-  runDailyLogTool,
-} from "@/lib/gemini/dailyLogTools";
-import {
-  CALENDAR_TOOLS,
-  CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
-  CALENDAR_TOOL_NAMES,
-  runCalendarTool,
-} from "@/lib/gemini/calendarTools";
+import { ALL_TOOLS, buildSystemInstruction } from "@/lib/gemini/allTools";
+import { findToolRunner } from "@/lib/voice/toolRunners";
 import { nowInfo, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
 import { recordPerf } from "@/lib/perf";
 
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
-
-// Dispatch tabuľka: mená nástrojov → funkcia, ktorá ich vykoná.
-const TOOL_RUNNERS: Array<{
-  names: string[];
-  run: (
-    supabase: any,
-    name: string,
-    args: Record<string, any>
-  ) => Promise<{ result?: unknown; error?: string }>;
-}> = [
-  { names: TASK_TOOL_NAMES, run: runTaskTool },
-  { names: MEMORY_TOOL_NAMES, run: runMemoryTool },
-  { names: NOTE_TOOL_NAMES, run: runNoteTool },
-  { names: PROJECT_TOOL_NAMES, run: runProjectTool },
-  { names: GOAL_TOOL_NAMES, run: runGoalTool },
-  { names: INSPIRATION_TOOL_NAMES, run: runInspirationTool },
-  { names: INBOX_TOOL_NAMES, run: runInboxTool },
-  { names: DAILY_LOG_TOOL_NAMES, run: runDailyLogTool },
-  { names: CALENDAR_TOOL_NAMES, run: runCalendarTool },
-];
-
-function findToolRunner(name: string) {
-  return TOOL_RUNNERS.find((r) => r.names.includes(name))?.run;
-}
 
 export type VoiceStatus = "idle" | "connecting" | "live" | "reconnecting" | "error";
 
@@ -295,34 +219,10 @@ export function VoiceAgentProvider({
         responseModalities: [Modality.AUDIO],
         // Musí byť identické so zoznamom zamknutým v /api/gemini-token
         // route.ts (server-side liveConnectConstraints.config).
-        tools: [
-          ...TASK_TOOLS,
-          ...MEMORY_TOOLS,
-          ...NOTE_TOOLS,
-          ...PROJECT_TOOLS,
-          ...GOAL_TOOLS,
-          ...INSPIRATION_TOOLS,
-          ...INBOX_TOOLS,
-          ...DAILY_LOG_TOOLS,
-          ...CALENDAR_TOOLS,
-        ],
+        // v2.2 — spoločný zoznam so serverom (lib/gemini/allTools.ts).
+        tools: ALL_TOOLS,
         systemInstruction: {
-          parts: [
-            {
-              text: [
-                ...(timeContextRef.current ? [timeContextRef.current] : []),
-                TASK_TOOLS_SYSTEM_INSTRUCTION,
-                MEMORY_SYSTEM_INSTRUCTION,
-                NOTE_TOOLS_SYSTEM_INSTRUCTION,
-                PROJECT_TOOLS_SYSTEM_INSTRUCTION,
-                GOAL_TOOLS_SYSTEM_INSTRUCTION,
-                INSPIRATION_TOOLS_SYSTEM_INSTRUCTION,
-                INBOX_TOOLS_SYSTEM_INSTRUCTION,
-                DAILY_LOG_TOOLS_SYSTEM_INSTRUCTION,
-                CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
-              ].join("\n\n"),
-            },
-          ],
+          parts: [{ text: buildSystemInstruction(timeContextRef.current) }],
         },
         sessionResumption: resumptionHandleRef.current
           ? { handle: resumptionHandleRef.current }
