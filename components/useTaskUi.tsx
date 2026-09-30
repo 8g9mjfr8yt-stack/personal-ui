@@ -236,5 +236,5 @@ export function useTaskUi({
     </>
   );
 
-  return { renderTask, openCreate, openEdit, remove, run, busyId, setOpenEvent, overlays };
+  return { renderTask, openCreate, openEdit, remove, unplan, run, busyId, setOpenEvent, overlays };
 }

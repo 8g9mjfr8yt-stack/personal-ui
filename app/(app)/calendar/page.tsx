@@ -25,7 +25,6 @@ import { useTaskUi, type UiProject } from "@/components/useTaskUi";
 
 const TZ = DEFAULT_TIME_ZONE;
 const DAY_LABELS = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
-const SELECTED_DAY_KEY = "da_calendar_selected_day";
 
 const SECTIONS: { key: PoolSection; label: string; danger?: boolean }[] = [
   { key: "missed", label: "Nestihnuté" },
@@ -58,23 +57,8 @@ export default function CalendarPage() {
   const [now, setNow] = useState(() => Date.now());
   useScrollRestore("da_scroll_calendar", tasks !== null);
 
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(SELECTED_DAY_KEY);
-      if (stored && /^\d{4}-\d{2}-\d{2}$/.test(stored)) setSelectedDayState(stored);
-    } catch {
-      /* localStorage nedostupné */
-    }
-  }, []);
-
-  function setSelectedDay(iso: string) {
-    setSelectedDayState(iso);
-    try {
-      window.localStorage.setItem(SELECTED_DAY_KEY, iso);
-    } catch {
-      /* ignore */
-    }
-  }
+  // Kalendár sa vždy otvára na dnešku (vybraný deň sa nepamätá).
+  const setSelectedDay = (iso: string) => setSelectedDayState(iso);
 
   const weekStartRef = useRef(weekStart);
   weekStartRef.current = weekStart;
@@ -153,6 +137,27 @@ export default function CalendarPage() {
     ui.run(t.id, () => planTaskToDay(createClient(), t, selectedDay).then(() => reload()), "Nepodarilo sa naplánovať úlohu.");
   }
 
+  // Úloha v zobrazení dňa + malé „−“ = odobrať z dňa → späť do poolu.
+  function renderDayTask(t: TaskV2, opts?: { faded?: boolean; extra?: string | null }) {
+    const removable = !opts?.faded && !t.completed_at && planMode(t) !== "anytime";
+    if (!removable) return ui.renderTask(t, opts);
+    return (
+      <div key={t.id} className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">{ui.renderTask(t, opts)}</div>
+        <button
+          type="button"
+          aria-label={`Odobrať z dňa: ${t.title}`}
+          title="Odobrať z dňa (späť do poolu)"
+          onClick={() => ui.unplan(t)}
+          disabled={ui.busyId === t.id}
+          className="mt-4 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-da-chip-bg text-sm font-bold leading-none text-da-chip-text disabled:opacity-50"
+        >
+          −
+        </button>
+      </div>
+    );
+  }
+
   function poolMeta(t: TaskV2, section: PoolSection): string {
     const parts: string[] = [];
     const mode = planMode(t);
@@ -162,8 +167,6 @@ export default function CalendarPage() {
       if (mode === "range") parts.push(`rozmedzie do ${shortDate(t.plan_end_date!)}`);
     }
     if (section === "range") parts.push(`${shortDate(t.plan_start_date!)} – ${shortDate(t.plan_end_date!)}`);
-    const dl = deadlineLabel(t);
-    if (dl) parts.push(dl.text);
     if ((t.postponed_count || 0) >= 2) parts.push(`odložené ${t.postponed_count}×`);
     return parts.join(" · ");
   }
@@ -237,7 +240,7 @@ export default function CalendarPage() {
             events={events}
             tasks={tasks}
             now={now}
-            renderTask={ui.renderTask}
+            renderTask={renderDayTask}
             onOpenEvent={ui.setOpenEvent}
             emptyText="Na tento deň nemáš naplánované úlohy."
           />
@@ -304,11 +307,15 @@ export default function CalendarPage() {
                               onClick={() => planToSelected(t)}
                               disabled={ui.busyId === t.id}
                               aria-label={`Naplánovať na ${sd}. ${sm}.`}
-                              className="shrink-0 rounded-full bg-da-accent px-3 py-1.5 text-xs font-semibold text-da-on-accent shadow-sm disabled:opacity-50"
+                              title={`Na ${sd}. ${sm}.`}
+                              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-da-accent text-lg font-semibold leading-none text-da-on-accent shadow-sm disabled:opacity-50"
                             >
-                              + Na {sd}. {sm}.
+                              +
                             </button>
                           </div>
+                          {rowOpen && deadlineLabel(t) && (
+                            <div className={`text-xs ${s.danger ? "text-da-danger" : "text-da-meta"}`}>{deadlineLabel(t)!.text}</div>
+                          )}
                           {rowOpen && (
                             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-da-border/60 pt-2">
                               {project ? (
