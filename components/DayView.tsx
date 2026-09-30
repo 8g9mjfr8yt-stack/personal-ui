@@ -89,9 +89,9 @@ export default function DayView({
       )}
 
       {timeline.length > 0 && (
-        <div className="mb-4 flex flex-col gap-2">
+        <div className="mb-4 flex flex-col gap-1.5">
           {timeline.map((it) => (
-            <div key={it.kind === "event" ? `e-${it.e.id}` : `t-${it.t.id}`} className="flex flex-col gap-2">
+            <div key={it.kind === "event" ? `e-${it.e.id}` : `t-${it.t.id}`} className="flex flex-col">
               {it.kind === "event" ? (
                 <EventCard
                   title={it.e.title}
