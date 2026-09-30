@@ -48,6 +48,24 @@ export default function CalendarPage() {
   const [tasks, setTasks] = useState<TaskV2[] | null>(null);
   const [pool, setPool] = useState<Record<PoolSection, TaskV2[]> | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
+  // pool: prepínač „S termínom“ / „Bez termínu“ (pamätá sa na zariadení)
+  const [poolView, setPoolViewState] = useState<"due" | "nodue">("due");
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem("da_pool_view");
+      if (v === "due" || v === "nodue") setPoolViewState(v);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function setPoolView(v: "due" | "nodue") {
+    setPoolViewState(v);
+    try {
+      window.localStorage.setItem("da_pool_view", v);
+    } catch {
+      /* ignore */
+    }
+  }
   const [projects, setProjects] = useState<UiProject[]>([]);
   const [subtasksByParent, setSubtasksByParent] = useState<Record<string, TaskV2[]>>({});
   const [expanded, setExpandedState] = useState<Record<string, boolean>>({});
@@ -157,6 +175,34 @@ export default function CalendarPage() {
   const done = tasks ? tasksOnDay(tasks, selectedDay).done : [];
   const urgent = pool ? pool.missed.length + pool.overdue.length : 0;
   const poolTotal = pool ? SECTIONS.reduce((n, s) => n + pool[s.key].length, 0) : 0;
+
+  // Skupiny poolu podľa prepínača:
+  //  S termínom:  Po termíne · Do dnes · Do zajtra · Do [dátum] (podľa deadlinu)
+  //  Bez termínu: Nestihnuté · Rozmedzie · Kedykoľvek (bez plánu aj termínu)
+  type PoolGroup = { key: string; label: string; danger?: boolean; section: PoolSection; tasks: TaskV2[] };
+  const poolGroups: { due: PoolGroup[]; nodue: PoolGroup[] } = { due: [], nodue: [] };
+  if (pool) {
+    const tomorrow = addDays(today, 1);
+    const overdue = pool.overdue;
+    const withDue = [...pool.missed, ...pool.range, ...pool.anytime].filter((t) => !!t.due_date);
+    if (overdue.length) poolGroups.due.push({ key: "overdue", label: "Po termíne", danger: true, section: "overdue", tasks: overdue });
+    const byDate = new Map<string, TaskV2[]>();
+    for (const t of withDue.sort((a, b) => a.due_date!.localeCompare(b.due_date!) || (a.due_time || "99").localeCompare(b.due_time || "99")))
+      (byDate.get(t.due_date!) || byDate.set(t.due_date!, []).get(t.due_date!)!).push(t);
+    for (const [d, ts] of Array.from(byDate.entries())) {
+      const year = d.slice(0, 4) !== today.slice(0, 4) ? ` ${d.slice(0, 4)}` : "";
+      const label = d === today ? "Do dnes" : d === tomorrow ? "Do zajtra" : `Do ${shortDate(d)}${year}`;
+      poolGroups.due.push({ key: `due-${d}`, label, section: "anytime", tasks: ts });
+    }
+    const noDue = (arr: TaskV2[]) => arr.filter((t) => !t.due_date);
+    const nd: [PoolSection, string][] = [["missed", "Nestihnuté"], ["range", "Rozmedzie"], ["anytime", "Kedykoľvek"]];
+    for (const [k, label] of nd) {
+      const ts = noDue(pool[k]);
+      if (ts.length) poolGroups.nodue.push({ key: k, label, section: k, tasks: ts });
+    }
+  }
+  const dueCount = poolGroups.due.reduce((n, g) => n + g.tasks.length, 0);
+  const noDueCount = poolGroups.nodue.reduce((n, g) => n + g.tasks.length, 0);
   const [, sm, sd] = selectedDay.split("-").map(Number);
 
   return (
@@ -251,16 +297,40 @@ export default function CalendarPage() {
           >
             {pool === null && <p className="py-3 text-sm text-da-muted">Načítavam…</p>}
             {pool !== null && poolTotal === 0 && <p className="py-3 text-sm text-da-muted">Žiadne voľné úlohy.</p>}
+            {pool !== null && poolTotal > 0 && (
+              <div className="sticky top-0 z-10 -mx-4 mb-3 flex gap-1 bg-da-card px-4 pb-2 pt-0.5">
+                {(
+                  [
+                    ["due", `S termínom (${dueCount})`],
+                    ["nodue", `Bez termínu (${noDueCount})`],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setPoolView(v)}
+                    className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium ${
+                      poolView === v ? "bg-da-accent text-da-on-accent" : "bg-da-chip-bg text-da-chip-text"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {pool !== null && poolTotal > 0 && poolGroups[poolView].length === 0 && (
+              <p className="pb-3 text-sm text-da-muted">{poolView === "due" ? "Žiadne voľné úlohy s termínom." : "Žiadne voľné úlohy bez termínu."}</p>
+            )}
             {pool !== null &&
-              SECTIONS.filter((s) => pool[s.key].length > 0).map((s) => (
-                <div key={s.key} className="pb-3">
-                  <div className={`mb-2 text-[11px] font-bold uppercase tracking-[0.08em] ${s.danger ? "text-da-danger" : "text-da-meta"}`}>
-                    {s.label} ({pool[s.key].length})
+              poolGroups[poolView].map((g) => (
+                <div key={g.key} className="pb-3">
+                  <div className={`mb-2 text-[11px] font-bold uppercase tracking-[0.08em] ${g.danger ? "text-da-danger" : "text-da-meta"}`}>
+                    {g.label} ({g.tasks.length})
                   </div>
                   <div className="flex flex-col gap-2">
-                    {pool[s.key].map((t) =>
+                    {g.tasks.map((t) =>
                       ui.renderTask(t, {
-                        pool: { label: `Na ${sd}. ${sm}.`, onPlan: () => planToSelected(t), detail: poolMeta(t, s.key) || null },
+                        pool: { label: `Na ${sd}. ${sm}.`, onPlan: () => planToSelected(t), detail: poolMeta(t, pool.missed.includes(t) ? "missed" : pool.range.includes(t) ? "range" : g.section) || null },
                       })
                     )}
                   </div>
