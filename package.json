@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:time": "node --experimental-strip-types --test tests/time.test.mjs"
+    "test:time": "node --experimental-strip-types --import ./tests/register.mjs --test tests/time.test.mjs tests/taskPlan.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
