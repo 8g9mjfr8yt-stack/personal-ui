@@ -1,6 +1,6 @@
 // v2.2 — texty pre zobrazenie času a termínu (spoločné pre Dnes/Kalendár).
 import { zonedDate, zonedTime, DEFAULT_TIME_ZONE } from "@/lib/time";
-import { isOverdue, type TaskPlanRow } from "@/lib/model/taskPlan";
+import { isOverdue, planMode, type TaskPlanRow } from "@/lib/model/taskPlan";
 
 const TZ = DEFAULT_TIME_ZONE;
 
@@ -34,4 +34,23 @@ export function deadlineLabel(t: TaskPlanRow, now: Date = new Date()): { text: s
   const today = zonedDate(now, TZ);
   if (t.due_date === today) return { text: `dnes do${time || " konca dňa"}`, overdue: false };
   return { text: `do ${shortDate(t.due_date)}${time}`, overdue: false };
+}
+
+// Plán úlohy v jednom riadku (zoznamy Úlohy/Projekty): „dnes“, „pi 2. 10.“,
+// „pi 2. 10. 10:00–11:00“, „st 30. 9. – ne 4. 10.“; kedykoľvek = null.
+export function planLabel(t: TaskPlanRow, now: Date = new Date()): string | null {
+  const today = zonedDate(now, TZ);
+  const day = (d: string) => (d === today ? "dnes" : shortDate(d));
+  switch (planMode(t)) {
+    case "day":
+      return day(t.plan_start_date!);
+    case "range":
+      return `${shortDate(t.plan_start_date!)} – ${shortDate(t.plan_end_date!)}`;
+    case "block": {
+      const sDay = zonedDate(t.plan_start_at!, TZ);
+      return `${day(sDay)} ${timeRangeLabel(t.plan_start_at!, t.plan_end_at!, sDay)}`;
+    }
+    default:
+      return null;
+  }
 }

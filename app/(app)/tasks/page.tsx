@@ -1,237 +1,121 @@
 "use client";
 
-import { useEffect, useState } from "react";
+// v2.2 — Úlohy (Viac → Úlohy): všetky nedokončené úlohy v novom modeli
+// plánu a termínu, rozdelené do sekcií
+//   Nestihnuté · Po termíne · Dnes · Naplánované · Rozmedzie · Kedykoľvek.
+// Zrkadlá Google udalostí (legacy_mirror) sa nezobrazujú. Karta úlohy,
+// editor a akcie sú zdieľané s Dnes/Kalendárom (components/useTaskUi.tsx).
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { getTasks, getSubtasksFor, updateTask, createTask, deleteTask, completeTask, uncompleteTask } from "@/lib/supabase/tasks";
+import { zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
+import { planMode, plannedDays, poolSection } from "@/lib/model/taskPlan";
+import { getOpenTasks, type TaskV2 } from "@/lib/supabase/tasksV2";
+import { getSubtasksFor } from "@/lib/supabase/tasks";
 import { getProjects } from "@/lib/supabase/projects";
-import TaskRow from "@/components/ui/TaskRow";
-import { sortTasksForDisplay } from "@/lib/taskSort";
 import { usePersistedFlags, useScrollRestore } from "@/lib/usePersistedState";
-import TaskEditModal, { type TaskEditModalInitial, type TaskEditModalValues } from "@/components/ui/TaskEditModal";
+import { useTaskUi, type UiProject } from "@/components/useTaskUi";
 
-type Task = {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string | null;
-  project_id: string | null;
-  due_date: string | null;
-  start_date: string | null;
-  scheduled_time: string | null;
-  scheduled_time_end: string | null;
-  depends_on_task_id: string | null;
-  parent_task_id: string | null;
-  context: string | null;
-  estimated_minutes: number | null;
-  created_at: string;
-};
+const TZ = DEFAULT_TIME_ZONE;
 
-type Project = { id: string; name: string; accent_color: string | null };
+type SectionKey = "missed" | "overdue" | "today" | "planned" | "range" | "anytime";
+const SECTIONS: { key: SectionKey; label: string; danger?: boolean }[] = [
+  { key: "missed", label: "Nestihnuté" },
+  { key: "overdue", label: "Po termíne", danger: true },
+  { key: "today", label: "Dnes" },
+  { key: "planned", label: "Naplánované" },
+  { key: "range", label: "Rozmedzie" },
+  { key: "anytime", label: "Kedykoľvek" },
+];
 
-function taskMeta(t: Task) {
-  const parts = [
-    t.start_date ? `od ${t.start_date}` : null,
-    t.due_date ? `termín ${t.due_date}` : "bez termínu",
-    t.estimated_minutes ? `~${t.estimated_minutes} min` : null,
-  ].filter(Boolean);
-  return parts.join(" · ");
+function sectionOf(t: TaskV2, today: string, now: Date): SectionKey {
+  const pool = poolSection(t, now, TZ);
+  if (pool) return pool; // missed / overdue / range / anytime
+  return plannedDays(t, TZ).includes(today) ? "today" : "planned";
 }
 
-// Interaktívny zoznam úloh nad rovnakou dátovou vrstvou (lib/supabase/tasks.ts),
-// akú používa aj hlasový agent — zmeny odtiaľto aj z hlasu sa navzájom
-// hneď odzrkadlia. Realtime počúvanie.
-//
-// Denný agent 2.0 (redesign-2-0, 2026-09-23) — prerobené z jednoduchého
-// zoznamu (iba Dokončiť/Zmazať/rýchly <select> na projekt) na plnohodnotné
-// úpravy priamo v UI namiesto spoliehania sa na hlasové ovládanie:
-// zdieľaný TaskRow (rozbalenie/podúlohy/farba projektu) + TaskEditModal
-// s plným formulárom (názov, popis, projekt, priorita, termíny, presný
-// čas, odhad trvania, podmienka, stav) na vytvorenie aj úpravu úlohy.
-//
-// 2026-09-25 — rozbalené úlohy a scroll pozícia sa ukladajú (rovnaký
-// vzor ako na Dnes/Kalendár/Projekty), takže prežijú prepnutie na inú
-// záložku a späť.
+// dátum na zoradenie v rámci sekcie
+function sortKey(t: TaskV2): string {
+  const mode = planMode(t);
+  if (mode === "block") return t.plan_start_at!;
+  if (mode === "day" || mode === "range") return t.plan_start_date!;
+  return t.due_date || "9999";
+}
+
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [subtasksByParent, setSubtasksByParent] = useState<Record<string, Task[]>>({});
+  const [tasks, setTasks] = useState<TaskV2[] | null>(null);
+  const [projects, setProjects] = useState<UiProject[]>([]);
+  const [subtasksByParent, setSubtasksByParent] = useState<Record<string, TaskV2[]>>({});
   const [expanded, setExpanded] = usePersistedFlags("da_tasks_expanded");
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const [modalInitial, setModalInitial] = useState<TaskEditModalInitial | null>(null);
-  const [modalSaving, setModalSaving] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
-
   useScrollRestore("da_scroll_tasks", tasks !== null);
 
-  async function load() {
+  const load = useCallback(async () => {
     const supabase = createClient();
     try {
-      const [taskData, projectData] = await Promise.all([
-        getTasks(supabase) as Promise<Task[]>,
-        getProjects(supabase) as Promise<Project[]>,
-      ]);
-      setTasks(taskData);
-      setProjects(projectData);
-
-      const subs = (await getSubtasksFor(supabase, taskData.map((t) => t.id))) as Task[];
-      const grouped: Record<string, Task[]> = {};
-      for (const s of subs) {
-        const pid = s.parent_task_id as unknown as string;
-        if (!grouped[pid]) grouped[pid] = [];
-        grouped[pid].push(s);
-      }
+      const [ts, pr] = await Promise.all([getOpenTasks(supabase), getProjects(supabase) as Promise<UiProject[]>]);
+      setTasks(ts);
+      setProjects(pr);
+      const subs = (await getSubtasksFor(supabase, ts.map((t) => t.id))) as TaskV2[];
+      const grouped: Record<string, TaskV2[]> = {};
+      for (const s of subs) (grouped[s.parent_task_id as string] ||= []).push(s);
       setSubtasksByParent(grouped);
+      setError(null);
     } catch (err) {
-      const e = err as Error;
-      setError(e?.message || "Nepodarilo sa načítať úlohy.");
+      setError((err as Error)?.message || "Nepodarilo sa načítať úlohy.");
     }
-  }
+  }, []);
+
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reload = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => load(), 300);
+  }, [load]);
 
   useEffect(() => {
     load();
     const supabase = createClient();
     const channel = supabase
-      .channel("realtime-tasks")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => load())
+      .channel("realtime-tasks-v22")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, reload)
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [load, reload]);
 
-  function projectFor(id: string | null) {
-    if (!id) return null;
-    return projects.find((p) => p.id === id) || null;
-  }
+  const today = zonedDate(new Date(), TZ);
+  const ui = useTaskUi({
+    day: today,
+    projects,
+    subtasksByParent,
+    setTasks,
+    setSubtasksByParent,
+    expanded,
+    setExpanded,
+    reload,
+    setError,
+  });
 
-  async function handleToggleDone(t: Task) {
-    setBusyId(t.id);
-    setError(null);
-    try {
-      const supabase = createClient();
-      if (t.status === "done") await uncompleteTask(supabase, t.id);
-      else await completeTask(supabase, t.id);
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setError(e?.message || "Nepodarilo sa aktualizovať úlohu.");
-    } finally {
-      setBusyId(null);
+  const sections = useMemo(() => {
+    const out: Record<SectionKey, TaskV2[]> = { missed: [], overdue: [], today: [], planned: [], range: [], anytime: [] };
+    if (!tasks) return out;
+    const now = new Date();
+    for (const t of tasks) out[sectionOf(t, today, now)].push(t);
+    for (const k of Object.keys(out) as SectionKey[]) {
+      out[k].sort((a, b) =>
+        k === "overdue"
+          ? (a.due_date || "").localeCompare(b.due_date || "")
+          : k === "anytime"
+          ? (a.due_date || "9999").localeCompare(b.due_date || "9999") || b.created_at.localeCompare(a.created_at)
+          : sortKey(a).localeCompare(sortKey(b))
+      );
     }
-  }
+    return out;
+  }, [tasks, today]);
 
-  async function handleToggleSubtask(s: Task) {
-    setBusyId(s.id);
-    setError(null);
-    try {
-      const supabase = createClient();
-      if (s.status === "done") await uncompleteTask(supabase, s.id);
-      else await completeTask(supabase, s.id);
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setError(e?.message || "Nepodarilo sa aktualizovať podúlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleAddSubtask(parentId: string) {
-    const title = window.prompt("Názov podúlohy:");
-    if (!title || !title.trim()) return;
-    setBusyId(parentId);
-    setError(null);
-    try {
-      const supabase = createClient();
-      await createTask(supabase, { title: title.trim(), parent_task_id: parentId });
-      setExpanded((prev) => ({ ...prev, [parentId]: true }));
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setError(e?.message || "Nepodarilo sa pridať podúlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleDelete(t: Task) {
-    if (!confirm(`Naozaj natrvalo zmazať úlohu "${t.title}"?`)) return;
-    setBusyId(t.id);
-    setError(null);
-    try {
-      const supabase = createClient();
-      await deleteTask(supabase, t.id);
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setError(e?.message || "Nepodarilo sa zmazať úlohu.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleAssignProject(taskId: string, projectId: string | null) {
-    setBusyId(taskId);
-    setError(null);
-    try {
-      const supabase = createClient();
-      await updateTask(supabase, { id: taskId, project_id: projectId });
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setError(e?.message || "Nepodarilo sa priradiť projekt.");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function openCreate() {
-    setModalError(null);
-    setModalInitial({});
-  }
-
-  function openEdit(t: Task) {
-    setModalError(null);
-    setModalInitial({
-      id: t.id,
-      title: t.title,
-      description: t.description,
-      priority: t.priority,
-      project_id: t.project_id,
-      due_date: t.due_date,
-      start_date: t.start_date,
-      scheduled_time: t.scheduled_time,
-      scheduled_time_end: t.scheduled_time_end,
-      estimated_minutes: t.estimated_minutes,
-      context: t.context,
-      status: t.status,
-    });
-  }
-
-  async function handleModalSave(values: TaskEditModalValues) {
-    if (!modalInitial) return;
-    setModalSaving(true);
-    setModalError(null);
-    try {
-      const supabase = createClient();
-      if (modalInitial.id) {
-        await updateTask(supabase, { id: modalInitial.id, ...values });
-      } else {
-        await createTask(supabase, values);
-      }
-      setModalInitial(null);
-      await load();
-    } catch (err) {
-      const e = err as Error;
-      setModalError(e?.message || "Nepodarilo sa uložiť úlohu.");
-    } finally {
-      setModalSaving(false);
-    }
-  }
+  const count = tasks?.length ?? 0;
 
   return (
     <div className="px-5 pt-6">
@@ -244,7 +128,7 @@ export default function TasksPage() {
         <button
           type="button"
           aria-label="Nová úloha"
-          onClick={openCreate}
+          onClick={() => ui.openCreate({})}
           className="flex h-7 w-7 items-center justify-center rounded-full bg-da-chip-bg text-da-chip-text"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
@@ -255,75 +139,25 @@ export default function TasksPage() {
       </div>
       {!error && tasks !== null && (
         <p className="mb-4 text-sm text-da-meta">
-          {tasks.length} {tasks.length === 1 ? "úloha" : "úloh"}
+          {count} {count === 1 ? "úloha" : count >= 2 && count <= 4 ? "úlohy" : "úloh"}
         </p>
       )}
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-
       {!error && tasks === null && <p className="text-da-muted">Načítavam…</p>}
+      {!error && tasks !== null && count === 0 && <p className="text-da-muted">Žiadne nedokončené úlohy.</p>}
 
-      {!error && tasks !== null && tasks.length === 0 && (
-        <p className="text-da-muted">Žiadne nedokončené úlohy.</p>
-      )}
+      {tasks !== null &&
+        SECTIONS.filter((s) => sections[s.key].length > 0).map((s) => (
+          <div key={s.key} className="pb-5">
+            <div className={`mb-2 text-[11px] font-bold uppercase tracking-[0.08em] ${s.danger ? "text-da-danger" : "text-da-meta"}`}>
+              {s.label} ({sections[s.key].length})
+            </div>
+            <div className="flex flex-col gap-2.5">{sections[s.key].map((t) => ui.renderTask(t, { showPlan: true }))}</div>
+          </div>
+        ))}
 
-      {!error && tasks !== null && tasks.length > 0 && (
-        <div className="flex flex-col gap-2.5 pb-4">
-          {sortTasksForDisplay(tasks).map((t) => {
-            const subs = subtasksByParent[t.id] || [];
-            const project = projectFor(t.project_id);
-            return (
-              <TaskRow
-                key={t.id}
-                title={t.title}
-                meta={taskMeta(t)}
-                done={t.status === "done"}
-                busy={busyId === t.id}
-                projectLabel={project?.name}
-                projectColor={project?.accent_color}
-                subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: s.status === "done" }))}
-                expanded={!!expanded[t.id]}
-                onToggleDone={() => handleToggleDone(t)}
-                onToggleExpand={() => setExpanded((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
-                onToggleSubtask={(subId) => {
-                  const sub = subs.find((s) => s.id === subId);
-                  if (sub) handleToggleSubtask(sub);
-                }}
-                onDeleteSubtask={(subId) => {
-                  const sub = subs.find((s) => s.id === subId);
-                  if (sub) handleDelete(sub);
-                }}
-                onAddSubtask={() => handleAddSubtask(t.id)}
-                onEdit={() => openEdit(t)}
-                onDelete={() => handleDelete(t)}
-                projects={projects}
-                currentProjectId={t.project_id}
-                onAssignProject={(pid) => handleAssignProject(t.id, pid)}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {modalInitial && (
-        <TaskEditModal
-          initial={modalInitial}
-          projects={projects}
-          saving={modalSaving}
-          error={modalError}
-          onSave={handleModalSave}
-          onClose={() => setModalInitial(null)}
-          onDelete={
-            modalInitial.id
-              ? () => {
-                  const init = modalInitial;
-                  setModalInitial(null);
-                  handleDelete({ id: init.id as string, title: init.title || "" } as Task);
-                }
-              : undefined
-          }
-        />
-      )}
+      {ui.overlays}
     </div>
   );
 }

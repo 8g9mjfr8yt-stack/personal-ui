@@ -8,7 +8,7 @@ import { useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { zonedDate, DEFAULT_TIME_ZONE } from "@/lib/time";
 import { planMode } from "@/lib/model/taskPlan";
-import { timeRangeLabel, deadlineLabel, shortDate } from "@/lib/model/labels";
+import { timeRangeLabel, deadlineLabel, shortDate, planLabel } from "@/lib/model/labels";
 import { setEventProject, type EventRow } from "@/lib/supabase/events";
 import { createTaskV2, updateTaskV2, setTaskDone, deleteTaskV2, type TaskV2, type TaskV2Input } from "@/lib/supabase/tasksV2";
 import TaskRow from "@/components/ui/TaskRow";
@@ -134,13 +134,20 @@ export function useTaskUi({
   // (plán, termín) až po rozbalení.
   function renderTask(
     t: TaskV2,
-    opts: { faded?: boolean; extra?: string | null; pool?: { label: string; onPlan: () => void; detail?: string | null } } = {}
+    opts: {
+      faded?: boolean;
+      extra?: string | null;
+      pool?: { label: string; onPlan: () => void; detail?: string | null };
+      showPlan?: boolean; // Úlohy/Projekty: plán (deň, rozmedzie, blok) v zbalenom riadku
+      bare?: boolean; // Projekty: bez vlastnej karty
+      hideProject?: boolean; // Projekty: projekt je zrejmý z karty
+    } = {}
   ) {
     const subs = subtasksByParent[t.id] || [];
     const project = projectFor(t.project_id);
     const dl = deadlineLabel(t);
     const parts = [
-      planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
+      opts.showPlan ? planLabel(t) : planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
       opts.extra,
       t.estimated_minutes ? `~${t.estimated_minutes} min` : null,
       t.gcal_sync_state === "error" ? "⚠ nesynchronizované s Google" : null,
@@ -149,13 +156,14 @@ export function useTaskUi({
       <TaskRow
         key={t.id}
         faded={opts.faded}
+        bare={opts.bare}
         title={t.title}
         meta={parts.join(" · ") || null}
         priority={t.priority}
         compactMeta
         done={isTaskDone(t)}
         busy={busyId === t.id}
-        projectLabel={project?.name}
+        projectLabel={opts.hideProject ? null : project?.name}
         projectColor={project?.accent_color}
         subtasks={subs.map((s) => ({ id: s.id, title: s.title, done: isTaskDone(s) }))}
         expanded={!!expanded[t.id]}

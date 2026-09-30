@@ -113,6 +113,35 @@ export async function getPool(
   return out;
 }
 
+// Všetky nedokončené hlavné úlohy (bez podúloh a bez skrytých zrkadiel
+// Google udalostí) — stránka Úlohy; voliteľne iba s projektom.
+export async function getOpenTasks(supabase: SupabaseClient, opts: { withProjectOnly?: boolean } = {}) {
+  let q = supabase
+    .from("tasks")
+    .select("*")
+    .is("parent_task_id", null)
+    .is("completed_at", null)
+    .eq("legacy_mirror", false);
+  if (opts.withProjectOnly) q = q.not("project_id", "is", null);
+  const { data, error } = await q.limit(1000);
+  if (error) throw error;
+  return (data || []) as TaskV2[];
+}
+
+// Úlohy projektov vrátane hotových (Projekty zobrazujú aj sekciu Hotové).
+export async function getProjectTasksV2(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .not("project_id", "is", null)
+    .is("parent_task_id", null)
+    .eq("legacy_mirror", false)
+    .order("created_at", { ascending: true })
+    .limit(1000);
+  if (error) throw error;
+  return (data || []) as TaskV2[];
+}
+
 export type TaskV2Input = Partial<
   Pick<
     TaskV2,
