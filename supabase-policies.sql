@@ -73,3 +73,10 @@ grant select, insert, update, delete on push_subscriptions to authenticated;
 -- side route bez authenticated browser session) — service_role má už od
 -- Fázy 1 explicitný GRANT na všetky existujúce aj budúce tabuľky v schéme
 -- public (default privileges), takže tu netreba nič naviac.
+
+-- 2026-09-30 — migrácia 0010 (fáza 3 prestavby): tabuľka events
+-- (lokálna projekcia Google Kalendára). Rovnaký vzor ako ostatné tabuľky.
+-- (Samotné príkazy sú v supabase/migrations/0010_prestavba_events_plan_zapisnik.sql.)
+-- create policy "authenticated full access" on events
+--   for all to authenticated using (true) with check (true);
+-- grant select, insert, update, delete on events to authenticated;
