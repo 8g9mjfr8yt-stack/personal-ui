@@ -74,6 +74,8 @@ export default function TaskRow({
   expandedDetail,
   projectBelow,
   expandedActions,
+  leading,
+  leadingWidth = 0,
 }: {
   title: string;
   meta?: string | null;
@@ -106,6 +108,9 @@ export default function TaskRow({
   projectBelow?: boolean;
   // ďalšie akcie po rozbalení (Dnes: Odložiť na zajtra / iný deň)
   expandedActions?: React.ReactNode;
+  // Dnes/Kalendár: čas pred krúžkom, v rovnakom stĺpci ako čas udalostí
+  leading?: React.ReactNode;
+  leadingWidth?: number;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const hasSubtasks = subtasks.length > 0;
@@ -224,6 +229,14 @@ export default function TaskRow({
   return (
     <div className={`relative ${wrapperClass}`}>
       <div className={`flex items-center gap-2 ${compactMeta ? `px-3 ${faded ? "py-1.5" : "py-2"}` : `px-4 ${faded ? "py-2.5" : "py-3.5"}`}`}>
+        {leading && (
+          <span
+            style={{ width: leadingWidth }}
+            className="shrink-0 whitespace-nowrap text-xs font-semibold tabular-nums text-da-meta"
+          >
+            {leading}
+          </span>
+        )}
         <button
           type="button"
           aria-label={done ? "Vrátiť medzi nedokončené" : "Označiť ako hotové"}
@@ -305,13 +318,16 @@ export default function TaskRow({
       {!compactMeta && menuPopup("right-3 top-[52px]")}
 
       {expanded && (
-        <div className={`relative flex flex-col gap-2 border-t border-da-border/70 ${compactMeta ? "px-3 py-2 pl-[40px]" : "px-4 py-3 pl-[46px]"}`}>
+        <div
+          className={`relative flex flex-col border-t border-da-border/70 ${compactMeta ? "gap-1 px-3 py-1.5" : "gap-2 px-4 py-3 pl-[46px]"}`}
+          style={compactMeta ? { paddingLeft: 12 + (leading ? leadingWidth + 8 : 0) + 24 + 8 } : undefined}
+        >
           {/* kompaktný režim: „⋮“ až pod deliacou čiarou, zarovnané so stĺpcom
               šípky/„−“ — horná časť karty sa po rozbalení nemení */}
           {compactMeta && (
-            <div className="absolute right-[14px] top-1.5">{menuButton("")}</div>
+            <div className="absolute right-[14px] top-1">{menuButton("")}</div>
           )}
-          {compactMeta && menuPopup("right-3 top-9")}
+          {compactMeta && menuPopup("right-3 top-8")}
           {/* pool: projekt a detail (termín) v jednom riadku */}
           {(expandedDetail || (projectLabel && projectBelow)) && (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-8">
@@ -328,16 +344,16 @@ export default function TaskRow({
           )}
           {expandedActions}
           {subtasks.map((s) => (
-            <div key={s.id} className="flex items-center gap-2.5">
+            <div key={s.id} className="flex items-center gap-2">
               <button
                 type="button"
                 aria-label={s.done ? "Vrátiť podúlohu" : "Označiť podúlohu ako hotovú"}
                 onClick={() => onToggleSubtask?.(s.id)}
-                className="flex h-[18px] w-[18px] shrink-0 items-center justify-center"
+                className="flex h-4 w-4 shrink-0 items-center justify-center"
               >
-                <ProgressRing percent={s.done ? 1 : 0} size={18} strokeWidth={2.5} color={accent} check={s.done} />
+                <ProgressRing percent={s.done ? 1 : 0} size={16} strokeWidth={2.2} color={accent} check={s.done} />
               </button>
-              <span className={`min-w-0 flex-grow text-sm ${s.done ? "text-da-muted line-through" : "text-da-text"}`}>
+              <span className={`min-w-0 flex-grow text-[13px] ${s.done ? "text-da-muted line-through" : "text-da-text"}`}>
                 {s.title}
               </span>
               {onDeleteSubtask && (
@@ -345,9 +361,9 @@ export default function TaskRow({
                   type="button"
                   aria-label={`Zmazať podúlohu: ${s.title}`}
                   onClick={() => onDeleteSubtask(s.id)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center text-da-muted"
+                  className="flex h-5 w-5 shrink-0 items-center justify-center text-da-muted"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -360,10 +376,10 @@ export default function TaskRow({
               type="button"
               aria-label="Pridať podúlohu"
               onClick={onAddSubtask}
-              className="-ml-[3px] mt-1 flex h-6 w-6 shrink-0 items-center justify-center"
+              className="-ml-[2px] flex h-5 w-5 shrink-0 items-center justify-center"
               style={{ color: accent }}
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>

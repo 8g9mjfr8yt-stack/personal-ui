@@ -57,7 +57,7 @@ export default function DayView({
   events: EventRow[];
   tasks: TaskV2[];
   now: number;
-  renderTask: (t: TaskV2, opts?: { faded?: boolean; extra?: string | null }) => ReactNode;
+  renderTask: (t: TaskV2, opts?: { faded?: boolean; extra?: string | null; leadingTime?: string | null; leadingWidth?: number }) => ReactNode;
   onOpenEvent: (e: EventRow) => void;
   emptyText: string;
   // Dnes: pri udalosti iba čas začiatku (koniec ukazuje Kalendár)
@@ -70,6 +70,10 @@ export default function DayView({
     ...dayEvents.filter((e) => !e.all_day).map((e) => ({ kind: "event" as const, start: Date.parse(e.start_at!), e })),
     ...blocks.filter((t) => !isTaskDone(t)).map((t) => ({ kind: "task" as const, start: Date.parse(t.plan_start_at!), t })),
   ].sort((a, b) => a.start - b.start);
+  // stĺpec času: Dnes iba začiatok, Kalendár celý rozsah
+  const timeWidth = startTimeOnly ? 36 : 74;
+  const timeLabelFor = (startAt: string, endAt: string) =>
+    startTimeOnly && zonedDate(startAt, TZ) === day ? zonedTime(startAt, TZ) : timeRangeLabel(startAt, endAt, day);
   const openDay = dayTasks.filter((t) => !isTaskDone(t));
   const openRange = rangeTasks.filter((t) => !isTaskDone(t));
 
@@ -101,17 +105,14 @@ export default function DayView({
               {it.kind === "event" ? (
                 <EventCard
                   title={it.e.title}
-                  timeLabel={
-                    startTimeOnly && zonedDate(it.e.start_at!, TZ) === day
-                      ? zonedTime(it.e.start_at!, TZ)
-                      : timeRangeLabel(it.e.start_at!, it.e.end_at!, day)
-                  }
+                  timeLabel={timeLabelFor(it.e.start_at!, it.e.end_at!)}
+                  timeWidth={timeWidth}
                   location={it.e.location}
                   dayLabel={eventDayLabel(it.e, day)}
                   onOpen={() => onOpenEvent(it.e)}
                 />
               ) : (
-                renderTask(it.t)
+                renderTask(it.t, { leadingTime: timeLabelFor(it.t.plan_start_at!, it.t.plan_end_at!), leadingWidth: timeWidth })
               )}
             </div>
           ))}

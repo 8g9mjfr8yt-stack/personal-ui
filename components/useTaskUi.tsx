@@ -141,13 +141,15 @@ export function useTaskUi({
       showPlan?: boolean; // Úlohy/Projekty: plán (deň, rozmedzie, blok) v zbalenom riadku
       bare?: boolean; // Projekty: bez vlastnej karty
       hideProject?: boolean; // Projekty: projekt je zrejmý z karty
+      leadingTime?: string | null; // Dnes/Kalendár: čas bloku pred krúžkom
+      leadingWidth?: number;
     } = {}
   ) {
     const subs = subtasksByParent[t.id] || [];
     const project = projectFor(t.project_id);
     const dl = deadlineLabel(t);
     const parts = [
-      opts.showPlan ? planLabel(t) : planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
+      opts.showPlan ? planLabel(t) : opts.leadingTime ? null : planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
       opts.extra,
       t.estimated_minutes ? `~${t.estimated_minutes} min` : null,
       t.gcal_sync_state === "error" ? "⚠ nesynchronizované s Google" : null,
@@ -157,6 +159,8 @@ export function useTaskUi({
         key={t.id}
         faded={opts.faded}
         bare={opts.bare}
+        leading={opts.leadingTime || undefined}
+        leadingWidth={opts.leadingWidth}
         title={t.title}
         meta={parts.join(" · ") || null}
         priority={t.priority}
