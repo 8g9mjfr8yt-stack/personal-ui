@@ -133,6 +133,16 @@ async function syncTaskToCalendar(supabase: SupabaseClient, task: SyncableTask) 
   }
 }
 
+// 2026-09-30 — poistka v dátovej vrstve (platí pre UI aj hlasového agenta):
+// časový koniec pred začiatkom sa neuloží. Porovnáva až normalizované UTC
+// hodnoty, takže nezáleží na formáte vstupu. Kontroluje sa iba vtedy, keď
+// sú v jednej operácii zadané obe hodnoty.
+function assertTimeOrder(start: string | null | undefined, end: string | null | undefined) {
+  if (start && end && new Date(end).getTime() <= new Date(start).getTime()) {
+    throw new Error("Koniec úlohy musí byť neskôr ako začiatok.");
+  }
+}
+
 const SYNC_RELEVANT_FIELDS = ["title", "description", "due_date", "scheduled_time", "scheduled_time_end", "start_date"];
 
 export async function getTasks(supabase: SupabaseClient) {
@@ -252,6 +262,10 @@ export async function createTask(
     parent_task_id?: string | null;
   }
 ) {
+  assertTimeOrder(
+    normalizeScheduledTime(input.scheduled_time),
+    normalizeScheduledTime(input.scheduled_time_end)
+  );
   const { data, error } = await supabase
     .from("tasks")
     .insert({
@@ -310,6 +324,9 @@ export async function updateTask(
   }
   if ("scheduled_time_end" in fields) {
     fields.scheduled_time_end = normalizeScheduledTime(fields.scheduled_time_end) ?? null;
+  }
+  if ("scheduled_time" in fields && "scheduled_time_end" in fields) {
+    assertTimeOrder(fields.scheduled_time, fields.scheduled_time_end);
   }
   const { data, error } = await supabase
     .from("tasks")

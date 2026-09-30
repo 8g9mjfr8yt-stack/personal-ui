@@ -76,10 +76,33 @@ export default function TaskEditModal({
   const [status, setStatus] = useState(initial.status || "todo");
 
   const isEdit = !!initial.id;
+  // 2026-09-30 — kontrola časov pred uložením. Predtým sa dala uložiť
+  // úloha s koncom pred začiatkom (reálny prípad „Martine termíny“:
+  // začiatok 16. 10., koniec 18. 9.) — Google Kalendár takú udalosť
+  // odmietol a synchronizácia potichu zlyhala.
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function validateTimes(): string | null {
+    if (scheduledTimeEnd && !scheduledTime) {
+      return "Koniec je vyplnený, ale chýba začiatok.";
+    }
+    // Obe hodnoty sú v rovnakom formáte "YYYY-MM-DDTHH:mm" z
+    // <input type="datetime-local">, takže sa dajú porovnať ako text.
+    if (scheduledTime && scheduledTimeEnd && scheduledTimeEnd <= scheduledTime) {
+      return "Koniec musí byť neskôr ako začiatok.";
+    }
+    if (startDate && dueDate && startDate > dueDate) {
+      return "Dátum Od musí byť skôr ako Termín (alebo rovnaký).";
+    }
+    return null;
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
+    const timeError = validateTimes();
+    setFormError(timeError);
+    if (timeError) return;
     onSave({
       title: title.trim(),
       description: description.trim() || null,
@@ -140,6 +163,7 @@ export default function TaskEditModal({
           </button>
         </div>
 
+        {formError && <p className="text-sm text-red-600">{formError}</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         <input
