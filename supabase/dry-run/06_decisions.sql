@@ -13,7 +13,10 @@ set decision = 'D', decided_at = now()
 where r.issue like 'iba due_date%'
   and r.proposed_mapping->>'title' <> 'Všetko najlepšie k narodeninám!';
 
--- A: narodeniny → udalosť (v Google sa vytvorí pri ostrom prevode)
+-- A: narodeniny → udalosť. Test fázy 3 (2026-09-30) ukázal, že v Google už
+--    existuje ako udalosť typu „narodeniny“ (projekcia ju načítala) — v Google
+--    sa NEVYTVÁRA znova, iba sa úloha skryje. Vloženie nižšie beží len vtedy,
+--    ak udalosť s rovnakým názvom a dňom ešte v `events` nie je.
 update migration_dry.migration_review r
 set decision = 'E', decided_at = now()
 where r.issue like 'iba due_date%'
@@ -23,6 +26,8 @@ insert into migration_dry.events (google_event_id, title, description, all_day, 
 select 'PENDING-' || t.id, t.title, t.description, true, t.due_date, t.due_date, t.project_id, 'from_task_pending_google'
 from migration_dry.src_tasks t
 where t.title = 'Všetko najlepšie k narodeninám!' and t.google_event_id is null
+  and not exists (select 1 from migration_dry.events e
+                  where e.title = t.title and e.start_date = t.due_date)
 on conflict (google_event_id) do nothing;
 
 update migration_dry.tasks_new
