@@ -308,15 +308,20 @@ export default function TaskRow({
             <div className="absolute right-[18px] top-2">{menuButton("")}</div>
           )}
           {compactMeta && menuPopup("right-3 top-9")}
-          {projectLabel && projectBelow && (
-            <span
-              className="self-start rounded-full px-2 py-0.5 text-[11px]"
-              style={{ background: softBg(projectColor), color: softText(projectColor) }}
-            >
-              {projectLabel}
-            </span>
+          {/* pool: projekt a detail (termín) v jednom riadku */}
+          {(expandedDetail || (projectLabel && projectBelow)) && (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 pr-8">
+              {projectLabel && projectBelow && (
+                <span
+                  className="rounded-full px-2 py-0.5 text-[11px]"
+                  style={{ background: softBg(projectColor), color: softText(projectColor) }}
+                >
+                  {projectLabel}
+                </span>
+              )}
+              {expandedDetail && <span className="text-xs text-da-meta">{expandedDetail}</span>}
+            </div>
           )}
-          {expandedDetail && <span className="pr-8 text-xs text-da-meta">{expandedDetail}</span>}
           {subtasks.map((s) => (
             <div key={s.id} className="flex items-center gap-2.5">
               <button
