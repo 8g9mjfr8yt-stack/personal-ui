@@ -200,7 +200,8 @@ export async function runTaskToolV2(
         return {
           result: {
             date,
-            events: events.map((e) => ({
+            // bloky úloh (task_id) sú v „blocks“, nie medzi udalosťami
+            events: events.filter((e) => !e.task_id).map((e) => ({
               id: e.google_event_id,
               title: e.title,
               all_day: e.all_day,

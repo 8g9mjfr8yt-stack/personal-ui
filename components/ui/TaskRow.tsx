@@ -223,7 +223,7 @@ export default function TaskRow({
 
   return (
     <div className={`relative ${wrapperClass}`}>
-      <div className={`flex items-center gap-2 px-4 ${faded ? "py-2.5" : "py-3.5"}`}>
+      <div className={`flex items-center gap-2 ${compactMeta ? `px-3 ${faded ? "py-1.5" : "py-2"}` : `px-4 ${faded ? "py-2.5" : "py-3.5"}`}`}>
         <button
           type="button"
           aria-label={done ? "Vrátiť medzi nedokončené" : "Označiť ako hotové"}
@@ -231,25 +231,26 @@ export default function TaskRow({
           onClick={onToggleDone}
           className="flex h-6 w-6 shrink-0 items-center justify-center disabled:opacity-50"
         >
-          <ProgressRing percent={ringPercent} size={24} strokeWidth={3} color={accent} check={done} />
+          <ProgressRing percent={ringPercent} size={compactMeta ? 20 : 24} strokeWidth={compactMeta ? 2.5 : 3} color={accent} check={done} />
         </button>
 
         {compactMeta ? (
+          // kompaktný riadok: názov a projekt vedľa seba, meta (čas) pod nimi
           <button type="button" onClick={onToggleExpand} className="min-w-0 flex-grow text-left">
-            <span
-              className={`block text-[15px] font-semibold ${done ? "text-da-muted line-through" : "text-da-text"}`}
-            >
-              {title}
-            </span>
-            {projectLabel && !projectBelow && (
-              <span
-                className="mt-1.5 inline-block rounded-full px-2 py-0.5 text-[11px]"
-                style={{ background: softBg(projectColor), color: softText(projectColor) }}
-              >
-                {projectLabel}
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className={`min-w-0 text-sm font-semibold ${done ? "text-da-muted line-through" : "text-da-text"}`}>
+                {title}
               </span>
-            )}
-            {meta && <span className="mt-1.5 block text-xs text-da-meta">{meta}</span>}
+              {projectLabel && !projectBelow && (
+                <span
+                  className="shrink-0 rounded-full px-1.5 py-px text-[10px]"
+                  style={{ background: softBg(projectColor), color: softText(projectColor) }}
+                >
+                  {projectLabel}
+                </span>
+              )}
+            </span>
+            {meta && <span className="mt-0.5 block text-xs text-da-meta">{meta}</span>}
           </button>
         ) : (
           <div className="flex min-w-0 flex-grow items-start gap-1">
@@ -304,11 +305,11 @@ export default function TaskRow({
       {!compactMeta && menuPopup("right-3 top-[52px]")}
 
       {expanded && (
-        <div className="relative flex flex-col gap-2 border-t border-da-border/70 px-4 py-3 pl-[46px]">
+        <div className={`relative flex flex-col gap-2 border-t border-da-border/70 ${compactMeta ? "px-3 py-2 pl-[40px]" : "px-4 py-3 pl-[46px]"}`}>
           {/* kompaktný režim: „⋮“ až pod deliacou čiarou, zarovnané so stĺpcom
               šípky/„−“ — horná časť karty sa po rozbalení nemení */}
           {compactMeta && (
-            <div className="absolute right-[18px] top-2">{menuButton("")}</div>
+            <div className="absolute right-[14px] top-1.5">{menuButton("")}</div>
           )}
           {compactMeta && menuPopup("right-3 top-9")}
           {/* pool: projekt a detail (termín) v jednom riadku */}

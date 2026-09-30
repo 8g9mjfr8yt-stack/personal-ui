@@ -26,8 +26,11 @@ export function eventDayLabel(e: EventRow, day: string): string | null {
 }
 
 export function eventsOnDay(events: EventRow[], day: string): EventRow[] {
+  // bloky úloh (udalosť s task_id) sa zobrazujú ako úlohy, nie ako udalosti
   return events.filter((e) =>
-    e.all_day
+    e.task_id
+      ? false
+      : e.all_day
       ? e.start_date! <= day && e.end_date! >= day
       : spanDays({ allDay: false, startAt: e.start_at!, endAt: e.end_at! }, TZ).includes(day)
   );
