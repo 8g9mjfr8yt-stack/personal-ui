@@ -18,6 +18,23 @@ import { recordPerf } from "@/lib/perf";
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
 
+// Token vopred (2026-09-30, merania: token ~0,5–0,6 s pri každom štarte):
+// token sa vyžiada už keď je appka otvorená a hlas nebeží, a obnovuje sa
+// každých ~40 s. Google ho dovolí použiť na spustenie session iba do 60 s
+// od vytvorenia (newSessionExpireTime), preto starší ako 45 s sa zahodí.
+type TokenData = { token: string; timeContext?: string; timeZone?: string };
+const TOKEN_MAX_AGE_MS = 45_000;
+const TOKEN_REFRESH_MS = 40_000;
+
+async function fetchToken(): Promise<TokenData> {
+  const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
+  if (!tokenRes.ok) {
+    const body = await tokenRes.json().catch(() => ({}) as any);
+    throw new Error(body.error || "Nepodarilo sa získať token zo servera");
+  }
+  return (await tokenRes.json()) as TokenData;
+}
+
 export type VoiceStatus = "idle" | "connecting" | "live" | "reconnecting" | "error";
 
 type VoiceAgentContextValue = {
@@ -320,6 +337,42 @@ export function VoiceAgentProvider({
     sessionRef.current = session;
   }
 
+  const prefetchedRef = useRef<{ data: TokenData; at: number } | null>(null);
+  const prefetchingRef = useRef(false);
+  const statusRef = useRef(status);
+  statusRef.current = status;
+
+  const prefetchToken = useCallback(async () => {
+    if (prefetchingRef.current) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (statusRef.current !== "idle" && statusRef.current !== "error") return;
+    const cur = prefetchedRef.current;
+    if (cur && Date.now() - cur.at < TOKEN_REFRESH_MS) return;
+    prefetchingRef.current = true;
+    try {
+      const at = Date.now();
+      const data = await fetchToken();
+      prefetchedRef.current = { data, at };
+    } catch {
+      prefetchedRef.current = null; // nevadí — pri štarte sa vyžiada nový
+    } finally {
+      prefetchingRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    prefetchToken();
+    const timer = setInterval(prefetchToken, 10_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") prefetchToken();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [prefetchToken]);
+
   async function startConversation() {
     setErrorMsg(null);
     setStatus("connecting");
@@ -352,20 +405,15 @@ export function VoiceAgentProvider({
     inputCtxRef.current = inputCtx;
 
     try {
-      const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
-      if (!tokenRes.ok) {
-        const body = await tokenRes.json().catch(() => ({}) as any);
-        throw new Error(body.error || "Nepodarilo sa získať token zo servera");
-      }
-      const { token, timeContext, timeZone } = (await tokenRes.json()) as {
-        token: string;
-        timeContext?: string;
-        timeZone?: string;
-      };
+      // token vopred, ak je dosť čerstvý (použije sa iba raz), inak nový
+      const cached = prefetchedRef.current;
+      prefetchedRef.current = null;
+      const fresh = cached && Date.now() - cached.at < TOKEN_MAX_AGE_MS;
+      const { token, timeContext, timeZone } = fresh ? cached!.data : await fetchToken();
       timeContextRef.current = timeContext || "";
       timeZoneRef.current = timeZone || DEFAULT_TIME_ZONE;
       const perfToken = performance.now();
-      recordPerf("hlas", "štart: token", perfToken - perfStart);
+      recordPerf("hlas", fresh ? "štart: token (vopred)" : "štart: token", perfToken - perfStart);
 
       aiClientRef.current = new GoogleGenAI({ apiKey: token });
 
