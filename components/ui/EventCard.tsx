@@ -33,7 +33,6 @@ export default function EventCard({
       >
         {timeLabel || "celý deň"}
       </span>
-      {timeWidth ? <span aria-hidden="true" className="w-6 shrink-0" /> : null}
       <span className="min-w-0 truncate text-sm font-medium text-da-text">{title}</span>
       {meta && <span className="ml-auto min-w-0 shrink truncate text-xs text-da-meta">{meta}</span>}
     </button>

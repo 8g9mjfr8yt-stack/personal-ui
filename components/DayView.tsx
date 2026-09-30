@@ -57,7 +57,7 @@ export default function DayView({
   events: EventRow[];
   tasks: TaskV2[];
   now: number;
-  renderTask: (t: TaskV2, opts?: { faded?: boolean; extra?: string | null; leadingTime?: string | null; leadingWidth?: number }) => ReactNode;
+  renderTask: (t: TaskV2, opts?: { faded?: boolean; extra?: string | null; timeInDetail?: boolean }) => ReactNode;
   onOpenEvent: (e: EventRow) => void;
   emptyText: string;
   // Dnes: pri udalosti iba čas začiatku (koniec ukazuje Kalendár)
@@ -112,7 +112,7 @@ export default function DayView({
                   onOpen={() => onOpenEvent(it.e)}
                 />
               ) : (
-                renderTask(it.t, { leadingTime: timeLabelFor(it.t.plan_start_at!, it.t.plan_end_at!), leadingWidth: timeWidth })
+                renderTask(it.t, { timeInDetail: true })
               )}
             </div>
           ))}

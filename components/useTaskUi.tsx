@@ -141,15 +141,16 @@ export function useTaskUi({
       showPlan?: boolean; // Úlohy/Projekty: plán (deň, rozmedzie, blok) v zbalenom riadku
       bare?: boolean; // Projekty: bez vlastnej karty
       hideProject?: boolean; // Projekty: projekt je zrejmý z karty
-      leadingTime?: string | null; // Dnes/Kalendár: čas bloku pred krúžkom
+      leadingTime?: string | null; // (nepoužíva sa) čas bloku pred krúžkom
       leadingWidth?: number;
+      timeInDetail?: boolean; // Dnes/Kalendár: čas bloku až po rozbalení
     } = {}
   ) {
     const subs = subtasksByParent[t.id] || [];
     const project = projectFor(t.project_id);
     const dl = deadlineLabel(t);
     const parts = [
-      opts.showPlan ? planLabel(t) : opts.leadingTime ? null : planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
+      opts.showPlan ? planLabel(t) : opts.leadingTime || opts.timeInDetail ? null : planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
       opts.extra,
       t.estimated_minutes ? `~${t.estimated_minutes} min` : null,
       t.gcal_sync_state === "error" ? "⚠ nesynchronizované s Google" : null,
@@ -212,7 +213,13 @@ export function useTaskUi({
           ) : undefined
         }
         expandedDetail={
-          [opts.pool?.detail || null, dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null].filter(Boolean).join(" · ") || null
+          [
+            opts.timeInDetail && planMode(t) === "block" ? timeRangeLabel(t.plan_start_at!, t.plan_end_at!, day) : null,
+            opts.pool?.detail || null,
+            dl ? (dl.overdue ? `⚠ ${dl.text}` : dl.text) : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || null
         }
         trailingAction={
           opts.pool ? (
