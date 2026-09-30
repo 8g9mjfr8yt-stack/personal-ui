@@ -12,6 +12,7 @@ Poradie spustenia v Supabase SQL Editore:
 3. `03_migrate.sql` — prevod podľa pravidiel 11.1 (nič sa nemaže).
 4. `04_report.sql` — súčty a kontroly (zdroj = prevedené + na kontrole, porušenia pravidiel 4.2).
 5. `05_review_list.sql` — zoznam nejednoznačných úloh na rozhodnutie.
+6. `06_decisions.sql` — rozhodnutia používateľa (2026-09-30), použijú sa aj pri ostrom prevode.
 
 Opakovateľné: každý skript najprv zmaže a znova vytvorí svoje tabuľky v `migration_dry`.
 Úplné odstránenie: `drop schema migration_dry cascade;`
