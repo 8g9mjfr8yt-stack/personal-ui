@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureWatchChannel, runIncrementalSync } from "@/lib/server/googleCalendarSync";
+import { refreshCalendarProjection } from "@/lib/server/calendarProjection";
 
 export const maxDuration = 60;
 
@@ -31,5 +32,13 @@ export async function GET(request: Request) {
     console.error("renew-calendar-watch: sync zlyhal:", err);
   }
 
-  return NextResponse.json({ watch, sync });
+  // Fáza 3 prestavby — denný posun okna projekcie `events` (tieňový režim).
+  let projection: unknown = null;
+  try {
+    projection = await refreshCalendarProjection(admin);
+  } catch (err) {
+    console.error("renew-calendar-watch: tieňová obnova events zlyhala:", err);
+  }
+
+  return NextResponse.json({ watch, sync, projection });
 }
