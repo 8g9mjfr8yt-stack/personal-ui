@@ -64,6 +64,7 @@ import {
   CALENDAR_TOOL_NAMES,
   runCalendarTool,
 } from "@/lib/gemini/calendarTools";
+import { nowInfo, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
 
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
@@ -219,6 +220,11 @@ export function VoiceAgentProvider({
     }
   }
 
+  // Krok 1a — text s aktuálnym časom a pásmo, ktoré vrátil server spolu s
+  // tokenom (musí byť identické so serverovou systemInstruction).
+  const timeContextRef = useRef<string>("");
+  const timeZoneRef = useRef<string>(DEFAULT_TIME_ZONE);
+
   async function handleFunctionCalls(functionCalls: any[]) {
     // Ak Gemini Live doručí ten istý tool-call opakovane (napr. po
     // reconnecte/session resumption, kým ešte nedostal potvrdenie na
@@ -252,7 +258,11 @@ export function VoiceAgentProvider({
         return {
           id: fc.id,
           name: fc.name,
-          response: error ? { error } : { result },
+          // Krok 1a: aktuálny čas pri každej odpovedi nástroja, aby
+          // relatívne výrazy sedeli aj v dlhom rozhovore.
+          response: error
+            ? { error, now: nowInfo(timeZoneRef.current).local }
+            : { result, now: nowInfo(timeZoneRef.current).local },
         };
       })
     );
@@ -293,6 +303,7 @@ export function VoiceAgentProvider({
           parts: [
             {
               text: [
+                ...(timeContextRef.current ? [timeContextRef.current] : []),
                 TASK_TOOLS_SYSTEM_INSTRUCTION,
                 MEMORY_SYSTEM_INSTRUCTION,
                 NOTE_TOOLS_SYSTEM_INSTRUCTION,
@@ -391,7 +402,13 @@ export function VoiceAgentProvider({
         const body = await tokenRes.json().catch(() => ({}) as any);
         throw new Error(body.error || "Nepodarilo sa získať token zo servera");
       }
-      const { token } = (await tokenRes.json()) as { token: string };
+      const { token, timeContext, timeZone } = (await tokenRes.json()) as {
+        token: string;
+        timeContext?: string;
+        timeZone?: string;
+      };
+      timeContextRef.current = timeContext || "";
+      timeZoneRef.current = timeZone || DEFAULT_TIME_ZONE;
 
       aiClientRef.current = new GoogleGenAI({ apiKey: token });
 

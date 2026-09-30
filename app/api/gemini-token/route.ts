@@ -27,6 +27,7 @@ import {
   CALENDAR_TOOLS,
   CALENDAR_TOOLS_SYSTEM_INSTRUCTION,
 } from "@/lib/gemini/calendarTools";
+import { buildTimeContextInstruction, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
 
 // Musí byť presne rovnaký model ako v app/(app)/voice/page.tsx.
 // Zoznam Live modelov: https://ai.google.dev/gemini-api/docs/models
@@ -48,6 +49,11 @@ export async function POST() {
   try {
     const client = new GoogleGenAI({ apiKey });
     const now = Date.now();
+    // Krok 1a (2026-09-30): aktuálny dátum a čas do inštrukcie. Ten istý
+    // text sa vracia prehliadaču (timeContext nižšie), aby klientská
+    // config zostala identická so serverovou.
+    const timeZone = process.env.APP_TIME_ZONE || DEFAULT_TIME_ZONE;
+    const timeContext = buildTimeContextInstruction(timeZone);
 
     const token = await client.authTokens.create({
       config: {
@@ -88,6 +94,7 @@ export async function POST() {
               parts: [
                 {
                   text: [
+                    timeContext,
                     TASK_TOOLS_SYSTEM_INSTRUCTION,
                     MEMORY_SYSTEM_INSTRUCTION,
                     NOTE_TOOLS_SYSTEM_INSTRUCTION,
@@ -112,7 +119,7 @@ export async function POST() {
       },
     });
 
-    return NextResponse.json({ token: token.name, model: MODEL });
+    return NextResponse.json({ token: token.name, model: MODEL, timeContext, timeZone });
   } catch (err) {
     console.error("Chyba pri vytváraní ephemeral tokenu pre Gemini Live:", err);
     return NextResponse.json(
