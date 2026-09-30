@@ -1,5 +1,6 @@
 "use client";
 
+import { recordPerf } from "@/lib/perf";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -102,6 +103,7 @@ export default function TodayPage() {
 
   async function load() {
     const supabase = createClient();
+    const perfStart = performance.now();
     try {
       const today = todayISO();
       // Koniec rozsahu (exkluzívne) = zajtra, počítané z lokálnych
@@ -133,6 +135,7 @@ export default function TodayPage() {
         grouped[pid].push(s);
       }
       setSubtasksByParent(grouped);
+      recordPerf("stránka", "Dnes – načítanie", performance.now() - perfStart);
     } catch (err) {
       const e = err as Error;
       setError(e?.message || "Nepodarilo sa načítať úlohy.");

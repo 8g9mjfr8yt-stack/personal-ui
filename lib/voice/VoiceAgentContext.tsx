@@ -65,6 +65,7 @@ import {
   runCalendarTool,
 } from "@/lib/gemini/calendarTools";
 import { nowInfo, DEFAULT_TIME_ZONE } from "@/lib/timeContext";
+import { recordPerf } from "@/lib/perf";
 
 // Musí byť presne rovnaký model ako v app/api/gemini-token/route.ts.
 const MODEL = "gemini-3.1-flash-live-preview";
@@ -224,6 +225,10 @@ export function VoiceAgentProvider({
   // tokenom (musí byť identické so serverovou systemInstruction).
   const timeContextRef = useRef<string>("");
   const timeZoneRef = useRef<string>(DEFAULT_TIME_ZONE);
+  // Fáza 0 — merania: kedy naposledy mikrofón zachytil reč a či agent
+  // práve začal novú odpoveď (odozva = koniec reči → prvý zvuk agenta).
+  const lastSpeechAtRef = useRef<number>(0);
+  const agentTurnActiveRef = useRef<boolean>(false);
 
   async function handleFunctionCalls(functionCalls: any[]) {
     // Ak Gemini Live doručí ten istý tool-call opakovane (napr. po
@@ -251,9 +256,11 @@ export function VoiceAgentProvider({
     const responses = await Promise.all(
       freshCalls.map(async (fc: any) => {
         const runner = findToolRunner(fc.name);
+        const toolStart = performance.now();
         const { result, error } = runner
           ? await runner(supabase, fc.name, fc.args || {})
           : { error: `Neznámy nástroj: ${fc.name}` };
+        recordPerf("nástroj", fc.name, performance.now() - toolStart);
         console.log(`[voice] výsledok ${fc.name}:`, error ? { error } : { result });
         return {
           id: fc.id,
@@ -332,9 +339,22 @@ export function VoiceAgentProvider({
           if (parts) {
             for (const part of parts) {
               if (part.inlineData?.data) {
+                if (!agentTurnActiveRef.current) {
+                  agentTurnActiveRef.current = true;
+                  if (lastSpeechAtRef.current > 0) {
+                    recordPerf(
+                      "hlas",
+                      "odozva (koniec reči → prvý zvuk)",
+                      performance.now() - lastSpeechAtRef.current
+                    );
+                  }
+                }
                 playAudioChunk(part.inlineData.data);
               }
             }
+          }
+          if (content?.turnComplete || content?.interrupted) {
+            agentTurnActiveRef.current = false;
           }
 
           const toolCall = message?.toolCall;
@@ -396,6 +416,9 @@ export function VoiceAgentProvider({
     manualStopRef.current = false;
     resumptionHandleRef.current = undefined;
 
+    const perfStart = performance.now();
+    lastSpeechAtRef.current = 0;
+    agentTurnActiveRef.current = false;
     try {
       const tokenRes = await fetch("/api/gemini-token", { method: "POST" });
       if (!tokenRes.ok) {
@@ -409,6 +432,8 @@ export function VoiceAgentProvider({
       };
       timeContextRef.current = timeContext || "";
       timeZoneRef.current = timeZone || DEFAULT_TIME_ZONE;
+      const perfToken = performance.now();
+      recordPerf("hlas", "štart: token", perfToken - perfStart);
 
       aiClientRef.current = new GoogleGenAI({ apiKey: token });
 
@@ -416,6 +441,8 @@ export function VoiceAgentProvider({
       nextPlayTimeRef.current = 0;
 
       await openSession(false);
+      const perfSession = performance.now();
+      recordPerf("hlas", "štart: spojenie s Gemini", perfSession - perfToken);
 
       // Mikrofón
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -427,6 +454,9 @@ export function VoiceAgentProvider({
 
       // ScriptProcessorNode je zastaraný, ale pre prvú funkčnú verziu je
       // najjednoduchší (bez samostatného AudioWorklet súboru).
+      recordPerf("hlas", "štart: mikrofón", performance.now() - perfSession);
+      recordPerf("hlas", "štart: spolu (klik → pripravené)", performance.now() - perfStart);
+
       const bufferSize = 4096;
       const processor = inputCtx.createScriptProcessor(bufferSize, 1, 1);
       processorRef.current = processor;
@@ -436,6 +466,13 @@ export function VoiceAgentProvider({
 
       processor.onaudioprocess = (event) => {
         const input = event.inputBuffer.getChannelData(0);
+        // Fáza 0 — jednoduchá detekcia reči podľa hlasitosti (RMS), iba
+        // na meranie odozvy; nijako neovplyvňuje, čo sa posiela Gemini.
+        let sum = 0;
+        for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+        if (Math.sqrt(sum / input.length) > 0.02) {
+          lastSpeechAtRef.current = performance.now();
+        }
         const resampled = resampleTo16k(input, inputRate, targetRate);
         const pcm16 = floatTo16BitPCM(resampled);
         const base64 = arrayBufferToBase64(pcm16.buffer);

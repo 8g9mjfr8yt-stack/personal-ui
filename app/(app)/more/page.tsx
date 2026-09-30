@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { uploadInboxFile, createInboxItem } from "@/lib/supabase/inbox";
 import ThemeToggle from "@/components/theme/ThemeToggle";
 import { APP_VERSION } from "@/lib/theme";
+import PerfPanel from "@/components/PerfPanel";
 
 // Denný agent 2.0 — "Viac": rozcestník na Úlohy / Inbox / Inšpirácia /
 // Poznámky / Pamäť + na spodku sekcie foto-zachytávanie do Inboxu a
@@ -87,6 +88,9 @@ export default function MorePage() {
         <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-da-meta">Vzhľad</span>
         <ThemeToggle />
       </div>
+
+      {/* Fáza 0 prestavby — dočasné merania rýchlosti */}
+      <PerfPanel />
 
       <div className="overflow-hidden rounded-da-card border border-da-border bg-da-card shadow-da-card">
         <input

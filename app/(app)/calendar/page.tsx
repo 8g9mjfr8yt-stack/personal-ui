@@ -1,5 +1,6 @@
 "use client";
 
+import { recordPerf } from "@/lib/perf";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -210,6 +211,7 @@ export default function CalendarPage() {
 
   async function load() {
     const supabase = createClient();
+    const perfStart = performance.now();
     try {
       const start = toISODate(weekDays[0]);
       const endExclusive = toISODate(
@@ -247,6 +249,7 @@ export default function CalendarPage() {
         subGrouped[pid].push(s);
       }
       setSubtasksByParent(subGrouped);
+      recordPerf("stránka", "Kalendár – načítanie", performance.now() - perfStart);
     } catch (err) {
       const e = err as Error;
       setError(e?.message || "Nepodarilo sa načítať kalendár.");
