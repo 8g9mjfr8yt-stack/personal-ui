@@ -297,36 +297,17 @@ export default function CalendarPage() {
           >
             {pool === null && <p className="py-3 text-sm text-da-muted">Načítavam…</p>}
             {pool !== null && poolTotal === 0 && <p className="py-3 text-sm text-da-muted">Žiadne voľné úlohy.</p>}
-            {pool !== null && poolTotal > 0 && (
-              <div className="sticky top-0 z-10 -mx-4 mb-3 flex gap-1 bg-da-card px-4 pb-2 pt-0.5">
-                {(
-                  [
-                    ["due", `S termínom (${dueCount})`],
-                    ["nodue", `Bez termínu (${noDueCount})`],
-                  ] as const
-                ).map(([v, label]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setPoolView(v)}
-                    className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium ${
-                      poolView === v ? "bg-da-accent text-da-on-accent" : "bg-da-chip-bg text-da-chip-text"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
             {pool !== null && poolTotal > 0 && poolGroups[poolView].length === 0 && (
-              <p className="pb-3 text-sm text-da-muted">{poolView === "due" ? "Žiadne voľné úlohy s termínom." : "Žiadne voľné úlohy bez termínu."}</p>
+              <p className="pb-3 text-sm text-da-muted">{poolView === "due" ? "Žiadne voľné úlohy s termínom." : "Žiadne voľné úlohy kedykoľvek."}</p>
             )}
             {pool !== null &&
               poolGroups[poolView].map((g) => (
                 <div key={g.key} className="pb-3">
-                  <div className={`mb-2 text-[11px] font-bold uppercase tracking-[0.08em] ${g.danger ? "text-da-danger" : "text-da-meta"}`}>
-                    {g.label} ({g.tasks.length})
-                  </div>
+                  {!(poolView === "nodue" && g.key === "anytime") && (
+                    <div className={`mb-2 text-[11px] font-bold uppercase tracking-[0.08em] ${g.danger ? "text-da-danger" : "text-da-meta"}`}>
+                      {g.label} ({g.tasks.length})
+                    </div>
+                  )}
                   <div className="flex flex-col gap-2">
                     {g.tasks.map((t) =>
                       ui.renderTask(t, {
@@ -336,6 +317,27 @@ export default function CalendarPage() {
                   </div>
                 </div>
               ))}
+          </div>
+        )}
+        {poolOpen && pool !== null && poolTotal > 0 && (
+          <div className="flex gap-1 border-t border-da-border bg-da-card px-4 py-2">
+            {(
+              [
+                ["due", `S termínom (${dueCount})`],
+                ["nodue", `Kedykoľvek (${noDueCount})`],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setPoolView(v)}
+                className={`flex-1 rounded-full px-3 py-1.5 text-xs font-medium ${
+                  poolView === v ? "bg-da-accent text-da-on-accent" : "bg-da-chip-bg text-da-chip-text"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         )}
         <button
