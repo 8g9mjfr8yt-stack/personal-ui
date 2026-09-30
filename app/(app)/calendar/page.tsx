@@ -287,15 +287,18 @@ export default function CalendarPage() {
                             s.danger ? "border-da-danger/50" : "border-da-border"
                           }`}
                         >
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
+                          <div className="flex w-full items-center gap-2">
+                            {/* div namiesto <button>: Safari nedovolí <button> zúžiť pod šírku
+                                textu, dlhý názov potom vytlačil tlačidlo „Na [deň]“ mimo pool */}
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={() => setPoolRowOpen((prev) => ({ ...prev, [t.id]: !prev[t.id] }))}
-                              className="flex min-w-0 flex-grow flex-col text-left"
+                              className="flex min-w-0 flex-1 basis-0 cursor-pointer flex-col overflow-hidden text-left"
                             >
                               <span className="truncate text-sm font-medium text-da-text">{t.title}</span>
                               {meta && <span className={`truncate text-xs ${s.danger ? "text-da-danger" : "text-da-meta"}`}>{meta}</span>}
-                            </button>
+                            </div>
                             <button
                               type="button"
                               onClick={() => planToSelected(t)}
